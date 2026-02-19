@@ -63,6 +63,12 @@
         const baseInteractRange = 70;
         const weaponInteractRange = 60;
         const baseWeaponIds = ['handgun', 'ar', 'rifle', 'shotgun'];
+        const weaponUnlockCosts = {
+            handgun: 0,
+            ar: 750,
+            shotgun: 1000,
+            rifle: 1500
+        };
 
         // Camera object
         const camera = {
@@ -102,6 +108,7 @@
             maxMeleeCooldown: 24,
             meleeRange: 85,
             meleeDamage: 2,
+            pickupRange: 40,
             meleeEffectTimer: 0,
             meleeDirX: 1,
             meleeDirY: 0
@@ -187,7 +194,7 @@
             const upgradeStationWidth = 120;
             const upgradeStationHeight = 80;
             const upgradeGap = 15;
-            const upgradeTypes = ['damage', 'moveSpeed', 'fireSpeed', 'reloadSpeed'];
+            const upgradeTypes = ['damage', 'moveSpeed', 'fireSpeed', 'reloadSpeed', 'maxHealth', 'pickupRange'];
             const upgradeStartY = baseConfig.y + baseConfig.height / 2 - (upgradeTypes.length * upgradeStationHeight + (upgradeTypes.length - 1) * upgradeGap) / 2;
             const upgradeX = baseConfig.x + baseConfig.wallThickness + 20;
             
@@ -300,6 +307,12 @@
             }
         };
         let selectedWeaponId = 'handgun';
+        const unlockedWeapons = {
+            handgun: true,
+            ar: false,
+            rifle: false,
+            shotgun: false
+        };
 
         // Enemy bullets array
         const enemyBullets = [];
@@ -356,7 +369,7 @@
         let difficulty = 1;
         let maxDifficulty = 20;
         let difficultyProgress = 0; // 0 to 100 for current level
-        let difficultyIncreaseRate = 0.017; // Per frame (100% faster)
+        let difficultyIncreaseRate = 0.02261; // Per frame (1.33x faster)
         let spawnTimer = 0;
         let money = 0;
         let enemiesKilled = 0;
@@ -368,7 +381,9 @@
             damage: { level: 0, baseCost: 50, multiplier: 1.5 },
             moveSpeed: { level: 0, baseCost: 40, multiplier: 1.5 },
             fireSpeed: { level: 0, baseCost: 60, multiplier: 1.5 },
-            reloadSpeed: { level: 0, baseCost: 45, multiplier: 1.5 }
+            reloadSpeed: { level: 0, baseCost: 45, multiplier: 1.5 },
+            maxHealth: { level: 0, baseCost: 80, multiplier: 1.55 },
+            pickupRange: { level: 0, baseCost: 55, multiplier: 1.5 }
         };
         
         function getUpgradeCost(upgradeType) {
@@ -381,13 +396,62 @@
             upgrades.moveSpeed.level = 0;
             upgrades.fireSpeed.level = 0;
             upgrades.reloadSpeed.level = 0;
+            upgrades.maxHealth.level = 0;
+            upgrades.pickupRange.level = 0;
+        }
+
+        function resetWeaponUnlocks() {
+            unlockedWeapons.handgun = true;
+            unlockedWeapons.ar = false;
+            unlockedWeapons.rifle = false;
+            unlockedWeapons.shotgun = false;
+        }
+
+        function isWeaponUnlocked(weaponId) {
+            return !!unlockedWeapons[weaponId];
+        }
+
+        function getWeaponUnlockCost(weaponId) {
+            return weaponUnlockCosts[weaponId] || 0;
+        }
+
+        function unlockWeapon(weaponId) {
+            if (!weaponConfigs[weaponId]) {
+                return;
+            }
+            unlockedWeapons[weaponId] = true;
+        }
+
+        function loadUnlockedWeaponsFromQuery(params) {
+            resetWeaponUnlocks();
+            const unlockedCsv = (params.get('unlocked') || '').trim();
+            if (!unlockedCsv) {
+                return;
+            }
+
+            const ids = unlockedCsv.split(',').map(id => id.trim()).filter(Boolean);
+            for (let id of ids) {
+                if (weaponConfigs[id]) {
+                    unlockWeapon(id);
+                }
+            }
+            unlockedWeapons.handgun = true;
+        }
+
+        function buildUnlockedWeaponsParam() {
+            const unlocked = baseWeaponIds.filter(id => isWeaponUnlocked(id));
+            if (unlocked.length === 0 || (unlocked.length === 1 && unlocked[0] === 'handgun')) {
+                return 'handgun';
+            }
+            return unlocked.join(',');
         }
 
         function loadTransientStateFromQuery() {
             const params = new URLSearchParams(window.location.search);
+            loadUnlockedWeaponsFromQuery(params);
 
             const queryWeaponId = params.get('weapon');
-            if (queryWeaponId && weaponConfigs[queryWeaponId]) {
+            if (queryWeaponId && weaponConfigs[queryWeaponId] && isWeaponUnlocked(queryWeaponId)) {
                 selectedWeaponId = queryWeaponId;
             } else {
                 selectedWeaponId = 'handgun';
@@ -401,20 +465,27 @@
             const moveSpeedLevel = Number.parseInt(params.get('upgMoveSpeed') || '0', 10);
             const fireSpeedLevel = Number.parseInt(params.get('upgFireSpeed') || '0', 10);
             const reloadSpeedLevel = Number.parseInt(params.get('upgReloadSpeed') || '0', 10);
+            const maxHealthLevel = Number.parseInt(params.get('upgMaxHealth') || '0', 10);
+            const pickupRangeLevel = Number.parseInt(params.get('upgPickupRange') || '0', 10);
             upgrades.damage.level = Number.isFinite(damageLevel) ? Math.max(0, damageLevel) : 0;
             upgrades.moveSpeed.level = Number.isFinite(moveSpeedLevel) ? Math.max(0, moveSpeedLevel) : 0;
             upgrades.fireSpeed.level = Number.isFinite(fireSpeedLevel) ? Math.max(0, fireSpeedLevel) : 0;
             upgrades.reloadSpeed.level = Number.isFinite(reloadSpeedLevel) ? Math.max(0, reloadSpeedLevel) : 0;
+            upgrades.maxHealth.level = Number.isFinite(maxHealthLevel) ? Math.max(0, maxHealthLevel) : 0;
+            upgrades.pickupRange.level = Number.isFinite(pickupRangeLevel) ? Math.max(0, pickupRangeLevel) : 0;
         }
 
         function buildGameStateQuery() {
             const params = new URLSearchParams();
             params.set('weapon', selectedWeaponId);
+            params.set('unlocked', buildUnlockedWeaponsParam());
             params.set('money', String(Math.max(0, Math.floor(money))));
             params.set('upgDamage', String(Math.max(0, upgrades.damage.level)));
             params.set('upgMoveSpeed', String(Math.max(0, upgrades.moveSpeed.level)));
             params.set('upgFireSpeed', String(Math.max(0, upgrades.fireSpeed.level)));
             params.set('upgReloadSpeed', String(Math.max(0, upgrades.reloadSpeed.level)));
+            params.set('upgMaxHealth', String(Math.max(0, upgrades.maxHealth.level)));
+            params.set('upgPickupRange', String(Math.max(0, upgrades.pickupRange.level)));
             return params.toString();
         }
         
@@ -424,6 +495,15 @@
             
             // Base melee damage: 2
             player.meleeDamage = 2 + upgrades.damage.level;
+
+            // Base max HP: 100
+            player.maxHealth = 100 + upgrades.maxHealth.level * 20;
+            if (player.health > player.maxHealth) {
+                player.health = player.maxHealth;
+            }
+
+            // Base pickup range: 40
+            player.pickupRange = 40 + upgrades.pickupRange.level * 12;
         }
         
         function applyUpgradesToWeapon(weapon) {
@@ -2178,7 +2258,7 @@
 
         // Update coins
         function updateCoins() {
-            const pickupRadius = 40;
+            const pickupRadius = player.pickupRange || 40;
             
             for (let i = coins.length - 1; i >= 0; i--) {
                 const coin = coins[i];
@@ -2394,15 +2474,16 @@
 
         function drawBaseElements() {
             for (let station of weaponStations) {
-                const isSelected = station.id === selectedWeaponId;
-                ctx.fillStyle = isSelected ? '#2f5d2f' : '#2a2a2a';
+                const unlocked = isWeaponUnlocked(station.id);
+                const isSelected = unlocked && station.id === selectedWeaponId;
+                ctx.fillStyle = unlocked ? (isSelected ? '#2f5d2f' : '#2a2a2a') : '#2a2222';
                 ctx.fillRect(
                     station.x - camera.x,
                     station.y - camera.y,
                     station.width,
                     station.height
                 );
-                ctx.strokeStyle = isSelected ? '#00ff00' : '#777777';
+                ctx.strokeStyle = unlocked ? (isSelected ? '#00ff00' : '#777777') : '#aa6666';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(
                     station.x - camera.x,
@@ -2410,12 +2491,12 @@
                     station.width,
                     station.height
                 );
-                ctx.fillStyle = isSelected ? '#ccffcc' : '#dddddd';
+                ctx.fillStyle = unlocked ? (isSelected ? '#ccffcc' : '#dddddd') : '#ff9999';
                 ctx.font = '12px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(
-                    weaponConfigs[station.id].name,
+                    unlocked ? weaponConfigs[station.id].name : 'LOCK',
                     station.x - camera.x + station.width / 2,
                     station.y - camera.y + station.height / 2
                 );
@@ -2452,7 +2533,9 @@
                     damage: 'Damage',
                     moveSpeed: 'Speed',
                     fireSpeed: 'Fire Rate',
-                    reloadSpeed: 'Reload'
+                    reloadSpeed: 'Reload',
+                    maxHealth: 'Max HP',
+                    pickupRange: 'Pickup'
                 };
                 ctx.fillText(
                     labels[station.type],
@@ -2512,14 +2595,25 @@
 
             let prompt = '';
             if (station) {
-                prompt = `Press E to take ${weaponConfigs[station.id].name}`;
+                if (isWeaponUnlocked(station.id)) {
+                    prompt = `Press E to take ${weaponConfigs[station.id].name}`;
+                } else {
+                    const unlockCost = getWeaponUnlockCost(station.id);
+                    if (money >= unlockCost) {
+                        prompt = `Press E to unlock ${weaponConfigs[station.id].name} ($${unlockCost})`;
+                    } else {
+                        prompt = `${weaponConfigs[station.id].name} unlock: $${unlockCost} (You have $${money})`;
+                    }
+                }
             } else if (upgradeStation) {
                 const cost = getUpgradeCost(upgradeStation.type);
                 const labels = {
                     damage: 'Damage',
                     moveSpeed: 'Move Speed',
                     fireSpeed: 'Fire Rate',
-                    reloadSpeed: 'Reload Speed'
+                    reloadSpeed: 'Reload Speed',
+                    maxHealth: 'Max Health',
+                    pickupRange: 'Pickup Range'
                 };
                 if (money >= cost) {
                     prompt = `Press E to upgrade ${labels[upgradeStation.type]} ($${cost})`;
@@ -2664,9 +2758,24 @@
             const playerCenterY = player.y + player.height / 2;
             const station = getNearbyWeaponStation(playerCenterX, playerCenterY);
             if (station) {
-                selectedWeaponId = station.id;
-                applySelectedWeapon(true);
-                return true;
+                if (isWeaponUnlocked(station.id)) {
+                    selectedWeaponId = station.id;
+                    applySelectedWeapon(true);
+                    return true;
+                }
+
+                const unlockCost = getWeaponUnlockCost(station.id);
+                if (money >= unlockCost) {
+                    money -= unlockCost;
+                    unlockWeapon(station.id);
+                    selectedWeaponId = station.id;
+                    applySelectedWeapon(true);
+                    playSound(850, 0.1, 'sine');
+                    return true;
+                }
+
+                playSound(150, 0.08, 'square');
+                return false;
             }
             const upgradeStation = getNearbyUpgradeStation(playerCenterX, playerCenterY);
             if (upgradeStation) {
@@ -2682,7 +2791,7 @@
                 }
             }
             if (!baseDoorOpen && isPlayerNearDoor(playerCenterX, playerCenterY)) {
-                window.location.href = `game.html?${buildGameStateQuery()}`;
+                window.location.href = `game.html?${buildGameStateQuery()}&v=20260218d`;
                 return true;
             }
             return false;
@@ -2690,8 +2799,8 @@
 
         function resetRunState() {
             isPaused = false;
-            player.health = player.maxHealth;
             applySelectedWeapon(true);
+            player.health = player.maxHealth;
             player.isReloading = false;
             player.fireCooldown = 0;
             player.invulnerable = false;

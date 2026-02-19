@@ -30,6 +30,14 @@
     <canvas id="gameCanvas"></canvas>
 
     <script>
+        const GAME_BUILD = '20260218d';
+        const currentUrl = new URL(window.location.href);
+        if (currentUrl.searchParams.get('v') !== GAME_BUILD) {
+            currentUrl.searchParams.set('v', GAME_BUILD);
+            window.location.replace(currentUrl.toString());
+        }
+        console.info('[TopDownExtractionShooter] game build', GAME_BUILD);
+
         // Canvas setup
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -103,6 +111,7 @@
             maxMeleeCooldown: 24,
             meleeRange: 85,
             meleeDamage: 2,
+            pickupRange: 40,
             meleeEffectTimer: 0,
             meleeDirX: 1,
             meleeDirY: 0,
@@ -179,6 +188,7 @@
         const bulletTrailMin = 6;
         const bulletTrailMax = 14;
         const bulletTrailAlpha = 0.45;
+        const baseWeaponIds = ['handgun', 'ar', 'rifle', 'shotgun'];
         const weaponConfigs = {
             handgun: {
                 id: 'handgun',
@@ -299,6 +309,12 @@
             }
         };
         let selectedWeaponId = 'handgun';
+        const unlockedWeapons = {
+            handgun: true,
+            ar: false,
+            rifle: false,
+            shotgun: false
+        };
 
         // Enemy bullets array
         const enemyBullets = [];
@@ -345,6 +361,7 @@
 
         // Coins array
         const coins = [];
+        const healingItems = [];
 
         // Noise system
         const noise = {
@@ -368,7 +385,7 @@
         let difficulty = 1;
         let maxDifficulty = 20;
         let difficultyProgress = 0; // 0 to 100 for current level
-        let difficultyIncreaseRate = 0.017; // Per frame (100% faster)
+        let difficultyIncreaseRate = 0.02261; // Per frame (1.33x faster)
         let spawnTimer = 0;
         let money = 0;
         let enemiesKilled = 0;
@@ -380,7 +397,9 @@
             damage: { level: 0 },
             moveSpeed: { level: 0 },
             fireSpeed: { level: 0 },
-            reloadSpeed: { level: 0 }
+            reloadSpeed: { level: 0 },
+            maxHealth: { level: 0 },
+            pickupRange: { level: 0 }
         };
 
         function resetUpgradeLevels() {
@@ -388,13 +407,51 @@
             upgrades.moveSpeed.level = 0;
             upgrades.fireSpeed.level = 0;
             upgrades.reloadSpeed.level = 0;
+            upgrades.maxHealth.level = 0;
+            upgrades.pickupRange.level = 0;
+        }
+
+        function resetWeaponUnlocks() {
+            unlockedWeapons.handgun = true;
+            unlockedWeapons.ar = false;
+            unlockedWeapons.rifle = false;
+            unlockedWeapons.shotgun = false;
+        }
+
+        function isWeaponUnlocked(weaponId) {
+            return !!unlockedWeapons[weaponId];
+        }
+
+        function loadUnlockedWeaponsFromQuery(params) {
+            resetWeaponUnlocks();
+            const unlockedCsv = (params.get('unlocked') || '').trim();
+            if (!unlockedCsv) {
+                return;
+            }
+
+            const ids = unlockedCsv.split(',').map(id => id.trim()).filter(Boolean);
+            for (let id of ids) {
+                if (weaponConfigs[id]) {
+                    unlockedWeapons[id] = true;
+                }
+            }
+            unlockedWeapons.handgun = true;
+        }
+
+        function buildUnlockedWeaponsParam() {
+            const unlocked = baseWeaponIds.filter(id => isWeaponUnlocked(id));
+            if (unlocked.length === 0 || (unlocked.length === 1 && unlocked[0] === 'handgun')) {
+                return 'handgun';
+            }
+            return unlocked.join(',');
         }
 
         function loadTransientStateFromQuery() {
             const params = new URLSearchParams(window.location.search);
+            loadUnlockedWeaponsFromQuery(params);
 
             const queryWeaponId = params.get('weapon');
-            selectedWeaponId = (queryWeaponId && weaponConfigs[queryWeaponId]) ? queryWeaponId : 'handgun';
+            selectedWeaponId = (queryWeaponId && weaponConfigs[queryWeaponId] && isWeaponUnlocked(queryWeaponId)) ? queryWeaponId : 'handgun';
 
             const queryMoney = Number.parseInt(params.get('money') || '0', 10);
             money = Number.isFinite(queryMoney) ? Math.max(0, queryMoney) : 0;
@@ -404,20 +461,27 @@
             const moveSpeedLevel = Number.parseInt(params.get('upgMoveSpeed') || '0', 10);
             const fireSpeedLevel = Number.parseInt(params.get('upgFireSpeed') || '0', 10);
             const reloadSpeedLevel = Number.parseInt(params.get('upgReloadSpeed') || '0', 10);
+            const maxHealthLevel = Number.parseInt(params.get('upgMaxHealth') || '0', 10);
+            const pickupRangeLevel = Number.parseInt(params.get('upgPickupRange') || '0', 10);
             upgrades.damage.level = Number.isFinite(damageLevel) ? Math.max(0, damageLevel) : 0;
             upgrades.moveSpeed.level = Number.isFinite(moveSpeedLevel) ? Math.max(0, moveSpeedLevel) : 0;
             upgrades.fireSpeed.level = Number.isFinite(fireSpeedLevel) ? Math.max(0, fireSpeedLevel) : 0;
             upgrades.reloadSpeed.level = Number.isFinite(reloadSpeedLevel) ? Math.max(0, reloadSpeedLevel) : 0;
+            upgrades.maxHealth.level = Number.isFinite(maxHealthLevel) ? Math.max(0, maxHealthLevel) : 0;
+            upgrades.pickupRange.level = Number.isFinite(pickupRangeLevel) ? Math.max(0, pickupRangeLevel) : 0;
         }
 
         function buildBaseStateQuery() {
             const params = new URLSearchParams();
             params.set('weapon', selectedWeaponId);
+            params.set('unlocked', buildUnlockedWeaponsParam());
             params.set('money', String(Math.max(0, Math.floor(money))));
             params.set('upgDamage', String(Math.max(0, upgrades.damage.level)));
             params.set('upgMoveSpeed', String(Math.max(0, upgrades.moveSpeed.level)));
             params.set('upgFireSpeed', String(Math.max(0, upgrades.fireSpeed.level)));
             params.set('upgReloadSpeed', String(Math.max(0, upgrades.reloadSpeed.level)));
+            params.set('upgMaxHealth', String(Math.max(0, upgrades.maxHealth.level)));
+            params.set('upgPickupRange', String(Math.max(0, upgrades.pickupRange.level)));
             return params.toString();
         }
 
@@ -425,18 +489,34 @@
             // Try to find a safe location for the door
             const doorWidth = extractDoor.width;
             const doorHeight = extractDoor.height;
-            const minDistanceFromCenter = 800; // Must be far from player spawn
+            const minDistanceFromCenter = 900;
+            const minDistanceFromPlayer = 700;
             const centerX = mapWidth / 2;
             const centerY = mapHeight / 2;
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            let bestFallback = null;
+            let bestScore = -Infinity;
 
-            for (let i = 0; i < 50; i++) {
+            for (let i = 0; i < 120; i++) {
                 const candidate = getRandomWalkablePosition(doorWidth, doorHeight);
                 const x = candidate.x;
                 const y = candidate.y;
+                const doorCenterX = x + doorWidth / 2;
+                const doorCenterY = y + doorHeight / 2;
 
                 // Check distance from center (player spawn)
-                const distFromCenter = Math.hypot(x - centerX, y - centerY);
+                const distFromCenter = Math.hypot(doorCenterX - centerX, doorCenterY - centerY);
                 if (distFromCenter < minDistanceFromCenter) {
+                    continue;
+                }
+
+                const distFromPlayer = Math.hypot(doorCenterX - playerCenterX, doorCenterY - playerCenterY);
+                if (distFromPlayer < minDistanceFromPlayer) {
+                    continue;
+                }
+
+                if (!isRectInWalkableArea(x, y, doorWidth, doorHeight)) {
                     continue;
                 }
 
@@ -445,15 +525,41 @@
                     continue;
                 }
 
-                extractDoor.x = x;
-                extractDoor.y = y;
+                const score = distFromCenter + distFromPlayer;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestFallback = { x, y };
+                }
+
+                if (distFromCenter > minDistanceFromCenter + 300 && distFromPlayer > minDistanceFromPlayer + 250) {
+                    extractDoor.x = x;
+                    extractDoor.y = y;
+                    return;
+                }
+            }
+
+            if (bestFallback) {
+                extractDoor.x = bestFallback.x;
+                extractDoor.y = bestFallback.y;
                 return;
             }
 
-            // Fallback: place at any valid location
-            const fallback = getRandomWalkablePosition(doorWidth, doorHeight);
-            extractDoor.x = fallback.x;
-            extractDoor.y = fallback.y;
+            // Last resort: any valid walkable, obstacle-free spot
+            for (let i = 0; i < 80; i++) {
+                const fallback = getRandomWalkablePosition(doorWidth, doorHeight);
+                if (!isRectInWalkableArea(fallback.x, fallback.y, doorWidth, doorHeight)) {
+                    continue;
+                }
+                if (checkObstacleCollision(fallback.x, fallback.y, doorWidth, doorHeight)) {
+                    continue;
+                }
+                extractDoor.x = fallback.x;
+                extractDoor.y = fallback.y;
+                return;
+            }
+
+            extractDoor.x = centerX - doorWidth / 2;
+            extractDoor.y = centerY - doorHeight / 2;
         }
 
         function updateExtractDoor() {
@@ -496,6 +602,20 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('EXIT', centerX, centerY);
+
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            const doorCenterX = extractDoor.x + extractDoor.width / 2;
+            const doorCenterY = extractDoor.y + extractDoor.height / 2;
+            const distance = Math.hypot(playerCenterX - doorCenterX, playerCenterY - doorCenterY);
+
+            if (distance < extractDoor.interactDistance) {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('E to extract', centerX, y - 8);
+            }
         }
         
         function applyUpgradesToPlayer() {
@@ -504,6 +624,15 @@
             
             // Base melee damage: 2
             player.meleeDamage = 2 + upgrades.damage.level;
+
+            // Base max HP: 100
+            player.maxHealth = 100 + upgrades.maxHealth.level * 20;
+            if (player.health > player.maxHealth) {
+                player.health = player.maxHealth;
+            }
+
+            // Base pickup range: 40
+            player.pickupRange = 40 + upgrades.pickupRange.level * 12;
         }
         
         function applyUpgradesToWeapon(weapon) {
@@ -524,15 +653,15 @@
         let deathMoneyPenalty = 0; // money lost due to death (divided by 10)
         let continueButtonHover = false;
 
-        // Extract door (DISABLED FOR TESTING)
-        // const extractDoor = {
-        //     x: 0,
-        //     y: 0,
-        //     width: 40,
-        //     height: 40,
-        //     color: '#ffaa00',
-        //     interactDistance: 60
-        // };
+        // Extract door
+        const extractDoor = {
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 40,
+            color: '#ffaa00',
+            interactDistance: 60
+        };
 
         function getSelectedWeapon() {
             const weapon = weaponConfigs[selectedWeaponId] || weaponConfigs.handgun;
@@ -972,7 +1101,9 @@
                 }
                 if (player.burnTickTimer <= 0) {
                     player.burnTickTimer = 18;
-                    player.health -= player.burnTickDamage;
+                    const burnDamage = Math.max(1, Math.round(player.burnTickDamage || 0));
+                    player.health -= burnDamage;
+                    player.health = Math.max(0, Math.floor(player.health));
                     player.hitTimer = 6;
                     createHitEffect(player.x + player.width / 2, player.y + player.height / 2, '#ff9933');
                     if (player.health <= 0) {
@@ -1928,24 +2059,42 @@
             return { x: coverX, y: coverY };
         }
 
-        function dropCoinsAt(x, y) {
-            const coinCount = 3 + Math.floor(Math.random() * 5);
+        function dropCoinsAt(x, y, eliteDrop = false) {
+            const coinCount = eliteDrop
+                ? (16 + Math.floor(Math.random() * 9))
+                : (3 + Math.floor(Math.random() * 5));
+            const coinValue = eliteDrop ? 3 : 1;
             for (let k = 0; k < coinCount; k++) {
                 const angle = (k / coinCount) * Math.PI * 2 + Math.random() * 0.5;
-                const distance = 20 + Math.random() * 20;
+                const distance = eliteDrop ? (24 + Math.random() * 34) : (20 + Math.random() * 20);
                 coins.push({
                     x: x + Math.cos(angle) * distance,
                     y: y + Math.sin(angle) * distance,
                     size: 6,
                     color: '#ffcc00',
-                    value: 1
+                    value: coinValue
                 });
             }
         }
 
+        function dropHealingItemAt(x, y) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 10 + Math.random() * 18;
+            healingItems.push({
+                x: x + Math.cos(angle) * distance,
+                y: y + Math.sin(angle) * distance,
+                size: 9,
+                healAmount: 30,
+                color: '#66ff66'
+            });
+        }
+
         function killEnemy(index, creditedToPlayer = false) {
             const enemy = enemies[index];
-            dropCoinsAt(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+            dropCoinsAt(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, isEliteEnemy(enemy));
+            if (Math.random() < 0.1) {
+                dropHealingItemAt(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+            }
             if (creditedToPlayer) {
                 enemiesKilled++;
                 runEnemiesKilled++;
@@ -1985,9 +2134,11 @@
                 });
             }
             
-            // Apply money penalty - divide by 10
-            deathMoneyPenalty = Math.floor(money / 10);
-            money = Math.max(0, money - deathMoneyPenalty);
+            // Apply money penalty: keep only one tenth of current money
+            const moneyBeforeDeath = Math.max(0, Math.floor(money));
+            const moneyAfterDeath = Math.floor(moneyBeforeDeath / 10);
+            deathMoneyPenalty = moneyBeforeDeath - moneyAfterDeath;
+            money = moneyAfterDeath;
             
             gameState = 'death';
             deathTimer = 0;
@@ -1997,7 +2148,8 @@
 
         function applyBurnToPlayer(damagePerTick, durationFrames) {
             player.burnTimer = Math.max(player.burnTimer, durationFrames || 0);
-            player.burnTickDamage = Math.max(player.burnTickDamage, damagePerTick || 0);
+            const normalizedBurnDamage = Math.max(1, Math.round(damagePerTick || 0));
+            player.burnTickDamage = Math.max(player.burnTickDamage, normalizedBurnDamage);
             if (player.burnTickTimer <= 0) {
                 player.burnTickTimer = 18;
             }
@@ -2006,7 +2158,9 @@
 
         function applyPlayerDamage(amount) {
             if (player.invulnerable) return;
-            player.health -= amount;
+            const normalizedDamage = Math.max(1, Math.round(amount || 0));
+            player.health -= normalizedDamage;
+            player.health = Math.max(0, Math.floor(player.health));
             player.invulnerable = true;
             player.invulnerableTime = 30;
             player.hitTimer = 10;
@@ -2254,6 +2408,7 @@
 
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const enemy = enemies[i];
+                const enemyIsElite = enemy.isElite === true;
                 const centerX = enemy.x + enemy.width / 2;
                 const centerY = enemy.y + enemy.height / 2;
                 if (!Number.isFinite(enemy.facingAngle)) {
@@ -2297,7 +2452,7 @@
                 if (enemy.lastSeenTimer > 0) {
                     enemy.lastSeenTimer--;
                 }
-                if (!isElite && enemy.reloadTimer > 0) {
+                if (!enemyIsElite && enemy.reloadTimer > 0) {
                     enemy.reloadTimer--;
                     if (enemy.reloadTimer <= 0) {
                         enemy.ammo = enemy.maxAmmo || 0;
@@ -2339,7 +2494,6 @@
                 const dy = targetY - centerY;
                 const distance = Math.hypot(dx, dy) || 1;
                 const hasLOS = target ? hasLineOfSight(centerX, centerY, targetX, targetY) : false;
-                const isElite = isEliteEnemy(enemy);
                 const isEliteSniper = enemy.eliteType === 'eliteSniper';
 
                 if (!isMelee && target) {
@@ -2349,7 +2503,7 @@
                         enemy.peekPoint = null;
                         enemy.behaviorTimer = Math.max(enemy.behaviorTimer, 60);
                     }
-                    if (isElite) {
+                    if (enemyIsElite) {
                         enemy.behavior = 'shoot';
                         enemy.coverPoint = null;
                         enemy.peekPoint = null;
@@ -2442,7 +2596,7 @@
                         } else if (distance < desiredRange * 0.7) {
                             moveX = (-dx / distance) * enemy.speed;
                             moveY = (-dy / distance) * enemy.speed;
-                        } else if (isElite) {
+                        } else if (enemyIsElite) {
                             const strafeAngle = Math.atan2(dy, dx) + (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2);
                             moveX = Math.cos(strafeAngle) * enemy.speed * 0.75;
                             moveY = Math.sin(strafeAngle) * enemy.speed * 0.75;
@@ -2470,11 +2624,11 @@
                 }
 
                 if (!isMelee && target && enemy.behavior === 'shoot') {
-                    if (!isElite && enemy.maxAmmo > 0 && enemy.reloadTimer > 0) {
+                    if (!enemyIsElite && enemy.maxAmmo > 0 && enemy.reloadTimer > 0) {
                         continue;
                     }
 
-                    if (!isElite && enemy.maxAmmo > 0 && enemy.ammo <= 0) {
+                    if (!enemyIsElite && enemy.maxAmmo > 0 && enemy.ammo <= 0) {
                         enemy.reloadTimer = enemy.reloadDuration || 120;
                         continue;
                     }
@@ -2498,7 +2652,7 @@
                                 color: '#ff3333',
                                 faction: enemy.faction,
                                 damage: weapon.damage,
-                                sourceElite: isElite,
+                                sourceElite: enemyIsElite,
                                 appliesBurn: false,
                                 burnDamage: 0,
                                 burnDuration: 0,
@@ -2508,7 +2662,7 @@
                             const playerDistance = Math.hypot(movedCenterX - playerCenterX, movedCenterY - playerCenterY);
                             playGunshot(playerDistance);
                             enemy.shootCooldown = weapon.fireCooldownFrames + Math.floor(Math.random() * 4);
-                            if (!isElite && enemy.maxAmmo > 0) {
+                            if (!enemyIsElite && enemy.maxAmmo > 0) {
                                 enemy.ammo -= 1;
                                 if (enemy.ammo <= 0) {
                                     enemy.reloadTimer = enemy.reloadDuration || 120;
@@ -2538,7 +2692,7 @@
                                     color: enemy.color,
                                     faction: enemy.faction,
                                     damage: weapon.damage,
-                                    sourceElite: isElite,
+                                    sourceElite: enemyIsElite,
                                     appliesBurn: !!weapon.appliesBurn,
                                     burnDamage: weapon.burnDamage || 0,
                                     burnDuration: weapon.burnDuration || 0,
@@ -2549,7 +2703,7 @@
                             const playerDistance = Math.hypot(movedCenterX - playerCenterX, movedCenterY - playerCenterY);
                             playGunshot(playerDistance);
                             enemy.shootCooldown = weapon.fireCooldownFrames + Math.floor(Math.random() * 6);
-                            if (!isElite && enemy.maxAmmo > 0) {
+                            if (!enemyIsElite && enemy.maxAmmo > 0) {
                                 enemy.ammo -= 1;
                                 if (enemy.ammo <= 0) {
                                     enemy.reloadTimer = enemy.reloadDuration || 120;
@@ -2633,7 +2787,7 @@
 
         // Update coins
         function updateCoins() {
-            const pickupRadius = 40;
+            const pickupRadius = player.pickupRange || 40;
             
             for (let i = coins.length - 1; i >= 0; i--) {
                 const coin = coins[i];
@@ -2652,6 +2806,31 @@
                         money += coin.value;
                         runMoneyEarned += coin.value;
                         coins.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        function updateHealingItems() {
+            const pickupRadius = player.pickupRange || 40;
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+
+            for (let i = healingItems.length - 1; i >= 0; i--) {
+                const item = healingItems[i];
+                const dx = playerCenterX - item.x;
+                const dy = playerCenterY - item.y;
+                const distance = Math.hypot(dx, dy);
+
+                if (distance < pickupRadius && distance > 0) {
+                    const pullSpeed = 5;
+                    item.x += (dx / distance) * pullSpeed;
+                    item.y += (dy / distance) * pullSpeed;
+
+                    if (distance < 10) {
+                        player.health = Math.min(player.maxHealth, player.health + item.healAmount);
+                        player.health = Math.floor(player.health);
+                        healingItems.splice(i, 1);
                     }
                 }
             }
@@ -2903,6 +3082,28 @@
             }
         }
 
+        function drawHealingItems() {
+            for (let item of healingItems) {
+                const drawX = item.x - camera.x;
+                const drawY = item.y - camera.y;
+
+                ctx.fillStyle = item.color;
+                ctx.beginPath();
+                ctx.arc(drawX, drawY, item.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(drawX - 2, drawY - 6, 4, 12);
+                ctx.fillRect(drawX - 6, drawY - 2, 12, 4);
+
+                ctx.strokeStyle = '#2ea84a';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(drawX, drawY, item.size, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
         // Draw difficulty bar at top of screen
         function drawDifficultyBar() {
             const barWidth = 300;
@@ -2976,7 +3177,7 @@
             ctx.font = '14px Arial';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            ctx.fillText(`HP: ${player.health}/${player.maxHealth}`, barX + 5, barY + barHeight / 2);
+            ctx.fillText(`HP: ${Math.floor(player.health)}/${Math.floor(player.maxHealth)}`, barX + 5, barY + barHeight / 2);
         }
 
         function getValidPlayerSpawn() {
@@ -3031,8 +3232,8 @@
             if (camera.y < 0) camera.y = 0;
             if (camera.y + canvas.height > mapHeight) camera.y = mapHeight - canvas.height;
             
-            player.health = player.maxHealth;
             applySelectedWeapon(true);
+            player.health = player.maxHealth;
             player.isReloading = false;
             player.fireCooldown = 0;
             player.invulnerable = false;
@@ -3055,14 +3256,15 @@
             difficultyProgress = 0;
             enemies.length = 0;
             deathMoneyPenalty = 0;
-            // spawnExtractDoor(); // DISABLED FOR TESTING
             bullets.length = 0;
             enemyBullets.length = 0;
             coins.length = 0;
+            healingItems.length = 0;
             particles.length = 0;
             spawnTimer = 0;
             runEnemiesKilled = 0;
             runMoneyEarned = 0;
+            spawnExtractDoor();
         }
 
         // Update death screen
@@ -3148,7 +3350,7 @@
                 // Death penalty message
                 ctx.fillStyle = '#ff4444';
                 ctx.font = 'bold 28px Arial';
-                ctx.fillText(`⚠ MONEY LOST: -$${deathMoneyPenalty} (10% penalty)`, canvas.width / 2, canvas.height / 2 + 130);
+                ctx.fillText(`⚠ MONEY LOST: -$${deathMoneyPenalty} (kept 10%)`, canvas.width / 2, canvas.height / 2 + 130);
                 
                 ctx.globalAlpha = 1;
             }
@@ -3275,6 +3477,7 @@
                 ctx.globalAlpha = 1; // Ensure alpha is reset
                 ctx.translate(shakeOffset.x, shakeOffset.y);
                 drawBackground();
+                drawLightingEffect();
                 
                 if (!isPaused) {
                     updatePlayer();
@@ -3287,7 +3490,8 @@
                     spawnEnemies();
                     updateEnemies();
                     updateCoins();
-                    // updateExtractDoor(); // DISABLED FOR TESTING
+                    updateHealingItems();
+                    updateExtractDoor();
                 }
                 
                 drawPlayer();
@@ -3296,11 +3500,9 @@
                 drawHitscanEffects();
                 drawParticles();
                 drawCoins();
+                drawHealingItems();
                 drawEnemies();
-                // drawExtractDoor(); // DISABLED FOR TESTING
-                
-                // Draw lighting effect before obstacles
-                drawLightingEffect();
+                drawExtractDoor();
 
                 // Draw obstacles on top so they're always visible
                 drawObstacles();
