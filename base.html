@@ -1,0 +1,3056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Top Down Extraction Shooter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            height: 100vh;
+            width: 100vw;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Lighting effect canvas
+        let lightingCanvas = null;
+        let lightingCtx = null;
+
+        function initLightingCanvas(width, height) {
+            if (!lightingCanvas) {
+                lightingCanvas = document.createElement('canvas');
+                lightingCtx = lightingCanvas.getContext('2d');
+            }
+            lightingCanvas.width = width;
+            lightingCanvas.height = height;
+        }
+
+        // Set canvas size to window size
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initLightingCanvas(canvas.width, canvas.height);
+            updateBaseLayout();
+        }
+        // Map dimensions
+        let mapWidth = window.innerWidth;
+        let mapHeight = window.innerHeight;
+
+        let baseConfig = null;
+
+        const baseInteractRange = 70;
+        const weaponInteractRange = 60;
+        const baseWeaponIds = ['handgun', 'ar', 'rifle', 'shotgun'];
+
+        // Camera object
+        const camera = {
+            x: 0,
+            y: 0
+        };
+
+        // Player object
+        const player = {
+            x: mapWidth / 2,
+            y: mapHeight / 2,
+            width: 30,
+            height: 30,
+            speed: 2.4,
+            velocityX: 0,
+            velocityY: 0,
+            color: '#00ff00',
+            ammo: 10,
+            maxAmmo: 10,
+            fireCooldown: 0,
+            isReloading: false,
+            reloadTime: 0,
+            maxReloadTime: 120, // frames for reload (2 seconds at 60fps)
+            health: 100,
+            maxHealth: 100,
+            invulnerable: false,
+            invulnerableTime: 0,
+            hitTimer: 0,
+            dashCooldown: 0,
+            maxDashCooldown: 80,
+            dashDistance: 130,
+            dashFrames: 8,
+            dashTimer: 0,
+            dashVelocityX: 0,
+            dashVelocityY: 0,
+            meleeCooldown: 0,
+            maxMeleeCooldown: 24,
+            meleeRange: 85,
+            meleeDamage: 2,
+            meleeEffectTimer: 0,
+            meleeDirX: 1,
+            meleeDirY: 0
+        };
+
+        // Obstacles array
+        const obstacles = [];
+
+        const baseWalls = [];
+        const baseDoorObstacle = {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0
+        };
+        let baseDoorOpen = false;
+        const weaponStations = [];
+        const upgradeStations = [];
+        const stationWidth = 70;
+        const stationHeight = 26;
+        const stationGap = 14;
+
+        function updateBaseLayout() {
+            mapWidth = canvas.width;
+            mapHeight = canvas.height;
+
+            baseConfig = {
+                x: 0,
+                y: 0,
+                width: mapWidth,
+                height: mapHeight,
+                wallThickness: 18,
+                doorWidth: 140
+            };
+
+            const baseDoorX = baseConfig.x + baseConfig.width / 2 - baseConfig.doorWidth / 2;
+            const baseDoorY = baseConfig.y + baseConfig.height - baseConfig.wallThickness;
+
+            baseDoorObstacle.x = baseDoorX;
+            baseDoorObstacle.y = baseDoorY;
+            baseDoorObstacle.width = baseConfig.doorWidth;
+            baseDoorObstacle.height = baseConfig.wallThickness;
+
+            baseWalls.length = 0;
+            baseWalls.push(
+                { x: baseConfig.x, y: baseConfig.y, width: baseConfig.width, height: baseConfig.wallThickness },
+                { x: baseConfig.x, y: baseConfig.y, width: baseConfig.wallThickness, height: baseConfig.height },
+                { x: baseConfig.x + baseConfig.width - baseConfig.wallThickness, y: baseConfig.y, width: baseConfig.wallThickness, height: baseConfig.height },
+                { x: baseConfig.x, y: baseDoorY, width: baseDoorX - baseConfig.x, height: baseConfig.wallThickness },
+                {
+                    x: baseDoorX + baseConfig.doorWidth,
+                    y: baseDoorY,
+                    width: baseConfig.x + baseConfig.width - (baseDoorX + baseConfig.doorWidth),
+                    height: baseConfig.wallThickness
+                }
+            );
+
+            obstacles.length = 0;
+            for (let wall of baseWalls) {
+                obstacles.push(wall);
+            }
+            if (!baseDoorOpen) {
+                obstacles.push(baseDoorObstacle);
+            }
+
+            weaponStations.length = 0;
+            const stationY = baseConfig.y + baseConfig.wallThickness + 14;
+            const stationsWidth = baseWeaponIds.length * stationWidth + (baseWeaponIds.length - 1) * stationGap;
+            let stationX = baseConfig.x + baseConfig.width / 2 - stationsWidth / 2;
+            for (let id of baseWeaponIds) {
+                weaponStations.push({
+                    id,
+                    x: stationX,
+                    y: stationY,
+                    width: stationWidth,
+                    height: stationHeight
+                });
+                stationX += stationWidth + stationGap;
+            }
+            
+            // Create upgrade stations on left side
+            upgradeStations.length = 0;
+            const upgradeStationWidth = 120;
+            const upgradeStationHeight = 80;
+            const upgradeGap = 15;
+            const upgradeTypes = ['damage', 'moveSpeed', 'fireSpeed', 'reloadSpeed'];
+            const upgradeStartY = baseConfig.y + baseConfig.height / 2 - (upgradeTypes.length * upgradeStationHeight + (upgradeTypes.length - 1) * upgradeGap) / 2;
+            const upgradeX = baseConfig.x + baseConfig.wallThickness + 20;
+            
+            for (let i = 0; i < upgradeTypes.length; i++) {
+                upgradeStations.push({
+                    type: upgradeTypes[i],
+                    x: upgradeX,
+                    y: upgradeStartY + i * (upgradeStationHeight + upgradeGap),
+                    width: upgradeStationWidth,
+                    height: upgradeStationHeight
+                });
+            }
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Bullets array
+        const bullets = [];
+        const bulletTrailMin = 6;
+        const bulletTrailMax = 14;
+        const bulletTrailAlpha = 0.45;
+        const weaponConfigs = {
+            handgun: {
+                id: 'handgun',
+                name: 'Handgun',
+                maxAmmo: 10,
+                reloadFrames: 120,
+                bulletSpeed: 10.5,
+                bulletSize: 5,
+                damage: 1,
+                shotsPerTrigger: 1,
+                spread: 0,
+                fireCooldownFrames: 0
+            },
+            ar: {
+                id: 'ar',
+                name: 'AR',
+                maxAmmo: 24,
+                reloadFrames: 240,
+                bulletSpeed: 12,
+                bulletSize: 4,
+                damage: 1,
+                shotsPerTrigger: 1,
+                spread: 0.39,
+                fireCooldownFrames: 10
+            },
+            rifle: {
+                id: 'rifle',
+                name: 'Rifle',
+                maxAmmo: 8,
+                reloadFrames: 420,
+                bulletSpeed: 45,
+                bulletSize: 5,
+                damage: 7,
+                shotsPerTrigger: 1,
+                spread: 0.03,
+                fireCooldownFrames: 120,
+                range: 2200
+            },
+            shotgun: {
+                id: 'shotgun',
+                name: 'Shotgun',
+                maxAmmo: 6,
+                reloadFrames: 150,
+                bulletSpeed: 9,
+                bulletSize: 4,
+                damage: 0.7,
+                shotsPerTrigger: 6,
+                spread: 0.75,
+                fireCooldownFrames: 75
+            }
+        };
+        const enemyWeaponConfigs = {
+            handgun: {
+                id: 'handgun',
+                bulletSpeed: 10,
+                bulletSize: 4,
+                damage: 8,
+                shotsPerTrigger: 1,
+                spread: 0.08,
+                fireCooldownFrames: 50
+            },
+            ar: {
+                id: 'ar',
+                bulletSpeed: 11,
+                bulletSize: 4,
+                damage: 6,
+                shotsPerTrigger: 1,
+                spread: 0.16,
+                fireCooldownFrames: 22
+            },
+            shotgun: {
+                id: 'shotgun',
+                bulletSpeed: 9.5,
+                bulletSize: 4,
+                damage: 3.5,
+                shotsPerTrigger: 5,
+                spread: 0.55,
+                fireCooldownFrames: 65
+            },
+            rifle: {
+                id: 'rifle',
+                bulletSpeed: 13,
+                bulletSize: 5,
+                damage: 10,
+                shotsPerTrigger: 1,
+                spread: 0.07,
+                fireCooldownFrames: 80
+            }
+        };
+        let selectedWeaponId = 'handgun';
+
+        // Enemy bullets array
+        const enemyBullets = [];
+        const enemyBulletSpeed = 9;
+        const enemyBulletSize = 4;
+        const hitscanEffects = [];
+        const hitscanFlashFrames = 6;
+
+        // Enemy factions
+        const enemyFactions = [
+            { id: 0, color: '#ff4d4d' },
+            { id: 1, color: '#4dd2ff' },
+            { id: 2, color: '#ffd24d' }
+        ];
+
+        // Visibility settings
+        const visibilityRadius = 8000; // Large radius for light effect to cover whole map
+        const visibilitySoftEdge = 160;
+
+        // Hearing settings
+        const hearingRadius = 900;
+
+        // Audio
+        let audioContext = null;
+
+        // Particles array for explosions
+        const particles = [];
+
+        // Enemies array
+        const enemies = [];
+
+        // Coins array
+        const coins = [];
+
+        // Noise system
+        const noise = {
+            x: mapWidth / 2,
+            y: mapHeight / 2,
+            value: 0,
+            decay: 0.96,
+            baseRadius: 120,
+            maxRadius: 700
+        };
+
+        const screenShake = {
+            intensity: 0,
+            timer: 0,
+            decay: 0.85
+        };
+
+        // Game state
+        let gameState = 'base'; // 'hub', 'base', 'playing', or 'death'
+        let isPaused = false;
+        let difficulty = 1;
+        let maxDifficulty = 20;
+        let difficultyProgress = 0; // 0 to 100 for current level
+        let difficultyIncreaseRate = 0.017; // Per frame (100% faster)
+        let spawnTimer = 0;
+        let money = 0;
+        let enemiesKilled = 0;
+        let runEnemiesKilled = 0;
+        let runMoneyEarned = 0;
+        
+        // Upgrade system
+        const upgrades = {
+            damage: { level: 0, baseCost: 50, multiplier: 1.5 },
+            moveSpeed: { level: 0, baseCost: 40, multiplier: 1.5 },
+            fireSpeed: { level: 0, baseCost: 60, multiplier: 1.5 },
+            reloadSpeed: { level: 0, baseCost: 45, multiplier: 1.5 }
+        };
+        
+        function getUpgradeCost(upgradeType) {
+            const upgrade = upgrades[upgradeType];
+            return Math.floor(upgrade.baseCost * Math.pow(upgrade.multiplier, upgrade.level));
+        }
+
+        function resetUpgradeLevels() {
+            upgrades.damage.level = 0;
+            upgrades.moveSpeed.level = 0;
+            upgrades.fireSpeed.level = 0;
+            upgrades.reloadSpeed.level = 0;
+        }
+
+        function loadTransientStateFromQuery() {
+            const params = new URLSearchParams(window.location.search);
+
+            const queryWeaponId = params.get('weapon');
+            if (queryWeaponId && weaponConfigs[queryWeaponId]) {
+                selectedWeaponId = queryWeaponId;
+            } else {
+                selectedWeaponId = 'handgun';
+            }
+
+            const queryMoney = Number.parseInt(params.get('money') || '0', 10);
+            money = Number.isFinite(queryMoney) ? Math.max(0, queryMoney) : 0;
+
+            resetUpgradeLevels();
+            const damageLevel = Number.parseInt(params.get('upgDamage') || '0', 10);
+            const moveSpeedLevel = Number.parseInt(params.get('upgMoveSpeed') || '0', 10);
+            const fireSpeedLevel = Number.parseInt(params.get('upgFireSpeed') || '0', 10);
+            const reloadSpeedLevel = Number.parseInt(params.get('upgReloadSpeed') || '0', 10);
+            upgrades.damage.level = Number.isFinite(damageLevel) ? Math.max(0, damageLevel) : 0;
+            upgrades.moveSpeed.level = Number.isFinite(moveSpeedLevel) ? Math.max(0, moveSpeedLevel) : 0;
+            upgrades.fireSpeed.level = Number.isFinite(fireSpeedLevel) ? Math.max(0, fireSpeedLevel) : 0;
+            upgrades.reloadSpeed.level = Number.isFinite(reloadSpeedLevel) ? Math.max(0, reloadSpeedLevel) : 0;
+        }
+
+        function buildGameStateQuery() {
+            const params = new URLSearchParams();
+            params.set('weapon', selectedWeaponId);
+            params.set('money', String(Math.max(0, Math.floor(money))));
+            params.set('upgDamage', String(Math.max(0, upgrades.damage.level)));
+            params.set('upgMoveSpeed', String(Math.max(0, upgrades.moveSpeed.level)));
+            params.set('upgFireSpeed', String(Math.max(0, upgrades.fireSpeed.level)));
+            params.set('upgReloadSpeed', String(Math.max(0, upgrades.reloadSpeed.level)));
+            return params.toString();
+        }
+        
+        function applyUpgradesToPlayer() {
+            // Base speed: 2.4
+            player.speed = 2.4 * (1 + upgrades.moveSpeed.level * 0.1);
+            
+            // Base melee damage: 2
+            player.meleeDamage = 2 + upgrades.damage.level;
+        }
+        
+        function applyUpgradesToWeapon(weapon) {
+            // Apply damage upgrade
+            weapon.damage = weapon.damage * (1 + upgrades.damage.level * 0.15);
+            
+            // Apply fire speed upgrade (reduce cooldown)
+            weapon.fireCooldownFrames = Math.max(0, weapon.fireCooldownFrames - upgrades.fireSpeed.level * 2);
+            
+            // Apply reload speed upgrade (reduce reload time)
+            weapon.reloadFrames = Math.max(30, weapon.reloadFrames - upgrades.reloadSpeed.level * 10);
+        }
+        
+        // Death animation variables
+        let deathTimer = 0;
+        let deathMoneyCount = 0;
+        let deathKillsCount = 0;
+        let continueButtonHover = false;
+
+        function getSelectedWeapon() {
+            const weapon = weaponConfigs[selectedWeaponId] || weaponConfigs.handgun;
+            const upgraded = { ...weapon };
+            applyUpgradesToWeapon(upgraded);
+            return upgraded;
+        }
+
+        function applySelectedWeapon(loadAmmo = false) {
+            const weapon = getSelectedWeapon();
+            player.maxAmmo = weapon.maxAmmo;
+            player.maxReloadTime = weapon.reloadFrames;
+            if (loadAmmo) {
+                player.ammo = player.maxAmmo;
+            } else if (player.ammo > player.maxAmmo) {
+                player.ammo = player.maxAmmo;
+            }
+            applyUpgradesToPlayer();
+        }
+
+        function getHubWeaponButtons() {
+            const buttonWidth = 210;
+            const buttonHeight = 100;
+            const gap = 20;
+            const totalWidth = buttonWidth * 2 + gap;
+            const startX = canvas.width / 2 - totalWidth / 2;
+            const startY = canvas.height / 2 + 130;
+            return [
+                { id: 'handgun', x: startX, y: startY, width: buttonWidth, height: buttonHeight },
+                { id: 'ar', x: startX + buttonWidth + gap, y: startY, width: buttonWidth, height: buttonHeight },
+                { id: 'rifle', x: startX, y: startY + buttonHeight + gap, width: buttonWidth, height: buttonHeight },
+                { id: 'shotgun', x: startX + buttonWidth + gap, y: startY + buttonHeight + gap, width: buttonWidth, height: buttonHeight }
+            ];
+        }
+
+        function getHubPlayButton() {
+            const buttonWidth = 220;
+            const buttonHeight = 60;
+            return {
+                x: canvas.width / 2 - buttonWidth / 2,
+                y: canvas.height / 2 + 120,
+                width: buttonWidth,
+                height: buttonHeight
+            };
+        }
+
+        function getEnemyWeaponConfig(enemy) {
+            return enemyWeaponConfigs[enemy.weaponId] || enemyWeaponConfigs.handgun;
+        }
+
+        function chooseEnemyWeaponId() {
+            const roll = Math.random();
+            if (difficulty >= 12) {
+                if (roll < 0.35) return 'ar';
+                if (roll < 0.55) return 'rifle';
+                if (roll < 0.75) return 'shotgun';
+                return 'handgun';
+            }
+            if (difficulty >= 6) {
+                if (roll < 0.3) return 'ar';
+                if (roll < 0.42) return 'rifle';
+                if (roll < 0.55) return 'shotgun';
+                return 'handgun';
+            }
+            if (difficulty >= 3) {
+                if (roll < 0.22) return 'ar';
+                if (roll < 0.32) return 'rifle';
+                if (roll < 0.42) return 'shotgun';
+                return 'handgun';
+            }
+            return 'handgun';
+        }
+
+        function chooseEnemyVariant() {
+            const roll = Math.random();
+            if (difficulty >= 4 && roll < 0.05) {
+                return 'special';
+            }
+            if (difficulty >= 3 && roll < 0.15) {
+                return 'melee';
+            }
+            return 'ranged';
+        }
+
+        function chooseSpecialWeaponId() {
+            const options = ['handgun', 'ar', 'rifle', 'shotgun'];
+            return options[Math.floor(Math.random() * options.length)];
+        }
+
+        function tryPlayerShootAt(mapMouseX, mapMouseY) {
+            if ((gameState !== 'playing' && gameState !== 'base') || isPaused || player.isReloading || player.ammo <= 0 || player.fireCooldown > 0) {
+                return false;
+            }
+
+            const weapon = getSelectedWeapon();
+            const dx = mapMouseX - (player.x + player.width / 2);
+            const dy = mapMouseY - (player.y + player.height / 2);
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance <= 0) {
+                return false;
+            }
+
+            if (weapon.id === 'rifle') {
+                performRifleHitscan(mapMouseX, mapMouseY, weapon);
+            } else {
+                const baseAngle = Math.atan2(dy, dx);
+                for (let shot = 0; shot < weapon.shotsPerTrigger; shot++) {
+                    const spreadOffset = (Math.random() - 0.5) * weapon.spread;
+                    const angle = baseAngle + spreadOffset;
+                    bullets.push({
+                        x: player.x + player.width / 2,
+                        y: player.y + player.height / 2,
+                        velocityX: Math.cos(angle) * weapon.bulletSpeed,
+                        velocityY: Math.sin(angle) * weapon.bulletSpeed,
+                        size: weapon.bulletSize,
+                        damage: weapon.damage,
+                        color: '#ffff00',
+                        trail: [],
+                        trailMax: Math.max(bulletTrailMin, Math.min(bulletTrailMax, Math.round(weapon.bulletSpeed)))
+                    });
+                }
+            }
+
+            player.ammo--;
+            player.fireCooldown = weapon.fireCooldownFrames || 0;
+            addNoise(0.35);
+            playGunshot(0);
+            addScreenShake(6, 12);
+
+            if (player.ammo <= 0) {
+                player.isReloading = true;
+                player.reloadTime = player.maxReloadTime;
+            }
+
+            return true;
+        }
+
+        function performRifleHitscan(mapMouseX, mapMouseY, weapon) {
+            const originX = player.x + player.width / 2;
+            const originY = player.y + player.height / 2;
+            const dx = mapMouseX - originX;
+            const dy = mapMouseY - originY;
+            const distance = Math.hypot(dx, dy) || 1;
+            const dirX = dx / distance;
+            const dirY = dy / distance;
+            const range = weapon.range || 2000;
+            const endX = originX + dirX * range;
+            const endY = originY + dirY * range;
+
+            let closestIndex = -1;
+            let closestDistance = range + 1;
+            let hitX = endX;
+            let hitY = endY;
+            let hitWall = false;
+
+            // Check for wall collisions
+            for (let obstacle of obstacles) {
+                const segments = [
+                    { x1: obstacle.x, y1: obstacle.y, x2: obstacle.x + obstacle.width, y2: obstacle.y },
+                    { x1: obstacle.x + obstacle.width, y1: obstacle.y, x2: obstacle.x + obstacle.width, y2: obstacle.y + obstacle.height },
+                    { x1: obstacle.x + obstacle.width, y1: obstacle.y + obstacle.height, x2: obstacle.x, y2: obstacle.y + obstacle.height },
+                    { x1: obstacle.x, y1: obstacle.y + obstacle.height, x2: obstacle.x, y2: obstacle.y }
+                ];
+
+                for (let seg of segments) {
+                    const hit = raySegmentIntersection(originX, originY, dirX, dirY, seg.x1, seg.y1, seg.x2, seg.y2);
+                    if (hit && hit.t < closestDistance) {
+                        closestDistance = hit.t;
+                        hitX = hit.x;
+                        hitY = hit.y;
+                        closestIndex = -1; // Wall hit takes priority
+                        hitWall = true;
+                    }
+                }
+            }
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                const enemyCenterX = enemy.x + enemy.width / 2;
+                const enemyCenterY = enemy.y + enemy.height / 2;
+                const enemyDistance = Math.hypot(enemyCenterX - originX, enemyCenterY - originY);
+
+                if (enemyDistance > range) {
+                    continue;
+                }
+
+                if (!hasLineOfSight(originX, originY, enemyCenterX, enemyCenterY)) {
+                    continue;
+                }
+
+                if (!lineIntersectsRect(originX, originY, endX, endY, enemy.x, enemy.y, enemy.width, enemy.height)) {
+                    continue;
+                }
+
+                if (enemyDistance < closestDistance) {
+                    closestDistance = enemyDistance;
+                    closestIndex = i;
+                    hitX = enemyCenterX;
+                    hitY = enemyCenterY;
+                    hitWall = false;
+                }
+            }
+
+            addHitscanEffect(originX, originY, hitX, hitY);
+
+            if (closestIndex >= 0) {
+                const enemy = enemies[closestIndex];
+                enemy.health -= weapon.damage;
+                enemy.hitTimer = 10;
+                createHitEffect(hitX, hitY, '#ff6666');
+                playHitSound(closestDistance);
+                if (enemy.health <= 0) {
+                    killEnemy(closestIndex, true);
+                }
+            } else if (hitWall) {
+                createHitEffect(hitX, hitY, '#aaaaaa');
+            }
+        }
+
+        // Input handling
+        const keys = {};
+        const mouseButtons = {
+            left: false
+        };
+        const mousePosition = {
+            x: canvas.width / 2,
+            y: canvas.height / 2
+        };
+
+        window.addEventListener('keydown', (e) => {
+            initAudio();
+            // Toggle pause on ESC (only during gameplay)
+            if (e.key === 'Escape' && gameState === 'base') {
+                isPaused = !isPaused;
+                return;
+            }
+            if (e.code === 'Space') {
+                if (gameState === 'base' && !isPaused) {
+                    performDash();
+                }
+                e.preventDefault();
+            }
+
+            if (e.key.toLowerCase() === 'e' && gameState === 'base') {
+                handleBaseInteract();
+            }
+            keys[e.key.toLowerCase()] = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        // Mouse click to shoot
+        window.addEventListener('mousedown', (e) => {
+            initAudio();
+            const rect = canvas.getBoundingClientRect();
+            mousePosition.x = e.clientX - rect.left;
+            mousePosition.y = e.clientY - rect.top;
+
+            // Handle continue button on death screen
+            const explosionDuration = 200;
+            if (gameState === 'death' && deathTimer > explosionDuration + 240 && deathMoneyCount >= runMoneyEarned && deathKillsCount >= runEnemiesKilled) {
+                const buttonWidth = 200;
+                const buttonHeight = 50;
+                const buttonX = canvas.width / 2 - buttonWidth / 2;
+                const buttonY = canvas.height / 2 + 140;
+
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                if (mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
+                    mouseY >= buttonY && mouseY <= buttonY + buttonHeight) {
+                    enterBase();
+                    return;
+                }
+            }
+
+            if ((gameState === 'playing' || gameState === 'base') && !isPaused) {
+                if (e.button === 2) {
+                    performMeleeAttack();
+                    return;
+                }
+
+                if (e.button !== 0) {
+                    return;
+                }
+
+                mouseButtons.left = true;
+            }
+            
+            if ((gameState !== 'playing' && gameState !== 'base') || e.button !== 0) {
+                return;
+            }
+
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            tryPlayerShootAt(mouseX + camera.x, mouseY + camera.y);
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                mouseButtons.left = false;
+            }
+        });
+
+        // Prevent browser context menu on right-click
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        // Mouse move for button hover
+        window.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mousePosition.x = e.clientX - rect.left;
+            mousePosition.y = e.clientY - rect.top;
+
+            const explosionDuration = 200;
+            if (gameState === 'death' && deathTimer > explosionDuration + 240) {
+                const buttonWidth = 200;
+                const buttonHeight = 50;
+                const buttonX = canvas.width / 2 - buttonWidth / 2;
+                const buttonY = canvas.height / 2 + 140;
+
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                continueButtonHover = mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
+                                     mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
+            } else {
+                continueButtonHover = false;
+            }
+        });
+
+        function performDash() {
+            if (player.dashCooldown > 0 || player.dashTimer > 0) {
+                return;
+            }
+
+            let dirX = 0;
+            let dirY = 0;
+
+            if (keys['w']) dirY -= 1;
+            if (keys['s']) dirY += 1;
+            if (keys['a']) dirX -= 1;
+            if (keys['d']) dirX += 1;
+
+            if (dirX === 0 && dirY === 0) {
+                const playerCenterX = player.x + player.width / 2;
+                const playerCenterY = player.y + player.height / 2;
+                dirX = (mousePosition.x + camera.x) - playerCenterX;
+                dirY = (mousePosition.y + camera.y) - playerCenterY;
+            }
+
+            const length = Math.hypot(dirX, dirY);
+            if (length === 0) {
+                return;
+            }
+
+            const normalizedX = dirX / length;
+            const normalizedY = dirY / length;
+            player.dashVelocityX = normalizedX * (player.dashDistance / player.dashFrames);
+            player.dashVelocityY = normalizedY * (player.dashDistance / player.dashFrames);
+            player.dashTimer = player.dashFrames;
+            player.dashCooldown = player.maxDashCooldown;
+            addNoise(0.08);
+        }
+
+        function performMeleeAttack() {
+            if (player.meleeCooldown > 0) {
+                return;
+            }
+
+            player.meleeCooldown = player.maxMeleeCooldown;
+            player.meleeEffectTimer = 8;
+
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            let dirX = (mousePosition.x + camera.x) - playerCenterX;
+            let dirY = (mousePosition.y + camera.y) - playerCenterY;
+            const dirLength = Math.hypot(dirX, dirY) || 1;
+            dirX /= dirLength;
+            dirY /= dirLength;
+            player.meleeDirX = dirX;
+            player.meleeDirY = dirY;
+
+            addNoise(0.1);
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                const enemyCenterX = enemy.x + enemy.width / 2;
+                const enemyCenterY = enemy.y + enemy.height / 2;
+                const toEnemyX = enemyCenterX - playerCenterX;
+                const toEnemyY = enemyCenterY - playerCenterY;
+                const distance = Math.hypot(toEnemyX, toEnemyY);
+
+                if (distance > player.meleeRange) {
+                    continue;
+                }
+
+                const normalizedToEnemyX = toEnemyX / (distance || 1);
+                const normalizedToEnemyY = toEnemyY / (distance || 1);
+                const dot = normalizedToEnemyX * dirX + normalizedToEnemyY * dirY;
+
+                if (dot < 0.2) {
+                    continue;
+                }
+
+                enemy.health -= player.meleeDamage;
+                enemy.hitTimer = 10;
+                createHitEffect(enemyCenterX, enemyCenterY, '#ffeeaa');
+                playHitSound(distance);
+
+                if (enemy.health <= 0) {
+                    killEnemy(i, true);
+                }
+            }
+        }
+        // Update player position
+        function updatePlayer() {
+            player.velocityX = 0;
+            player.velocityY = 0;
+
+            if (player.dashCooldown > 0) {
+                player.dashCooldown--;
+            }
+
+            if (player.meleeCooldown > 0) {
+                player.meleeCooldown--;
+            }
+
+            if (player.meleeEffectTimer > 0) {
+                player.meleeEffectTimer--;
+            }
+
+            if (player.fireCooldown > 0) {
+                player.fireCooldown--;
+            }
+
+            if (mouseButtons.left && selectedWeaponId === 'ar') {
+                tryPlayerShootAt(mousePosition.x + camera.x, mousePosition.y + camera.y);
+            }
+
+            let inputX = 0;
+            let inputY = 0;
+
+            if (keys['w']) {
+                inputY -= 1;
+            }
+            if (keys['s']) {
+                inputY += 1;
+            }
+            if (keys['a']) {
+                inputX -= 1;
+            }
+            if (keys['d']) {
+                inputX += 1;
+            }
+
+            if (inputX !== 0 || inputY !== 0) {
+                const length = Math.hypot(inputX, inputY);
+                player.velocityX = (inputX / length) * player.speed;
+                player.velocityY = (inputY / length) * player.speed;
+                addNoise(0.015);
+            }
+
+            // Manual reload with R key
+            if (keys['r'] && !player.isReloading && player.ammo < player.maxAmmo) {
+                player.isReloading = true;
+                player.reloadTime = player.maxReloadTime;
+            }
+
+            // Helper function to check collision
+            function checkCollision(x, y) {
+                for (let obstacle of obstacles) {
+                    if (x < obstacle.x + obstacle.width &&
+                        x + player.width > obstacle.x &&
+                        y < obstacle.y + obstacle.height &&
+                        y + player.height > obstacle.y) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            if (player.dashTimer > 0) {
+                let dashNewX = player.x + player.dashVelocityX;
+                if (!checkCollision(dashNewX, player.y)) {
+                    player.x = dashNewX;
+                }
+
+                let dashNewY = player.y + player.dashVelocityY;
+                if (!checkCollision(player.x, dashNewY)) {
+                    player.y = dashNewY;
+                }
+                player.dashTimer--;
+            } else {
+                // Try to move horizontally
+                let newX = player.x + player.velocityX;
+                if (!checkCollision(newX, player.y)) {
+                    player.x = newX;
+                }
+
+                // Try to move vertically
+                let newY = player.y + player.velocityY;
+                if (!checkCollision(player.x, newY)) {
+                    player.y = newY;
+                }
+            }
+
+            // Keep player in bounds of map
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > mapWidth) player.x = mapWidth - player.width;
+            if (player.y < 0) player.y = 0;
+            if (player.y + player.height > mapHeight) player.y = mapHeight - player.height;
+
+            // Update reload
+            if (player.isReloading) {
+                player.reloadTime--;
+                if (player.reloadTime <= 0) {
+                    player.isReloading = false;
+                    player.ammo = player.maxAmmo;
+                }
+            }
+
+            if (player.hitTimer > 0) {
+                player.hitTimer--;
+            }
+
+            // Keep camera locked to the base screen
+            camera.x = 0;
+            camera.y = 0;
+        }
+
+        function ensureBulletTrail(bullet) {
+            if (!bullet.trail) {
+                bullet.trail = [];
+            }
+            if (!bullet.trailMax) {
+                const speed = Math.hypot(bullet.velocityX || 0, bullet.velocityY || 0) || 1;
+                bullet.trailMax = Math.max(bulletTrailMin, Math.min(bulletTrailMax, Math.round(speed)));
+            }
+        }
+
+        function pushBulletTrail(bullet) {
+            ensureBulletTrail(bullet);
+            bullet.trail.push({ x: bullet.x, y: bullet.y });
+            if (bullet.trail.length > bullet.trailMax) {
+                bullet.trail.shift();
+            }
+        }
+
+        function drawBulletTrail(bullet) {
+            if (!bullet.trail || bullet.trail.length < 2) {
+                return;
+            }
+
+            ctx.save();
+            ctx.strokeStyle = bullet.color;
+            for (let i = 1; i < bullet.trail.length; i++) {
+                const t = i / bullet.trail.length;
+                ctx.globalAlpha = bulletTrailAlpha * t;
+                ctx.lineWidth = Math.max(1, bullet.size * (0.6 + t));
+                ctx.beginPath();
+                ctx.moveTo(bullet.trail[i - 1].x - camera.x, bullet.trail[i - 1].y - camera.y);
+                ctx.lineTo(bullet.trail[i].x - camera.x, bullet.trail[i].y - camera.y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function addHitscanEffect(x1, y1, x2, y2) {
+            hitscanEffects.push({
+                x1,
+                y1,
+                x2,
+                y2,
+                life: hitscanFlashFrames,
+                maxLife: hitscanFlashFrames
+            });
+        }
+
+        function updateHitscanEffects() {
+            for (let i = hitscanEffects.length - 1; i >= 0; i--) {
+                hitscanEffects[i].life--;
+                if (hitscanEffects[i].life <= 0) {
+                    hitscanEffects.splice(i, 1);
+                }
+            }
+        }
+
+        function drawHitscanEffects() {
+            for (let effect of hitscanEffects) {
+                const t = effect.life / effect.maxLife;
+                const startX = effect.x1 - camera.x;
+                const startY = effect.y1 - camera.y;
+                const endX = effect.x2 - camera.x;
+                const endY = effect.y2 - camera.y;
+
+                ctx.save();
+                ctx.globalAlpha = 0.35 * t;
+                ctx.strokeStyle = '#ffdd88';
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+
+                ctx.globalAlpha = 0.85 * t;
+                ctx.strokeStyle = '#fff4cc';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // Update bullets
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].velocityX;
+                bullets[i].y += bullets[i].velocityY;
+                pushBulletTrail(bullets[i]);
+
+                // Check collision with obstacles
+                let hitObstacle = false;
+                for (let obstacle of obstacles) {
+                    if (bullets[i].x > obstacle.x && 
+                        bullets[i].x < obstacle.x + obstacle.width &&
+                        bullets[i].y > obstacle.y && 
+                        bullets[i].y < obstacle.y + obstacle.height) {
+                        hitObstacle = true;
+                        // Create explosion on hit
+                        createExplosion(bullets[i].x, bullets[i].y);
+                        break;
+                    }
+                }
+
+                // Check if bullet hit map boundaries (walls)
+                let hitWall = bullets[i].x < 0 || bullets[i].x > mapWidth ||
+                    bullets[i].y < 0 || bullets[i].y > mapHeight;
+
+                if (hitWall) {
+                    // Create explosion on wall hit
+                    createExplosion(bullets[i].x, bullets[i].y);
+                }
+
+                // Remove bullets that go off map or hit obstacles
+                if (hitObstacle || hitWall) {
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+
+        // Update enemy bullets
+        function updateEnemyBullets() {
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = enemyBullets[i];
+                bullet.x += bullet.velocityX;
+                bullet.y += bullet.velocityY;
+                pushBulletTrail(bullet);
+
+                // Check collision with obstacles
+                let hitObstacle = false;
+                for (let obstacle of obstacles) {
+                    if (bullet.x > obstacle.x &&
+                        bullet.x < obstacle.x + obstacle.width &&
+                        bullet.y > obstacle.y &&
+                        bullet.y < obstacle.y + obstacle.height) {
+                        hitObstacle = true;
+                        createExplosion(bullet.x, bullet.y);
+                        break;
+                    }
+                }
+
+                // Check if bullet hit map boundaries
+                let hitWall = bullet.x < 0 || bullet.x > mapWidth || bullet.y < 0 || bullet.y > mapHeight;
+
+                // Check collision with player
+                if (!hitObstacle && !hitWall &&
+                    bullet.x > player.x &&
+                    bullet.x < player.x + player.width &&
+                    bullet.y > player.y &&
+                    bullet.y < player.y + player.height) {
+                    applyPlayerDamage(bullet.damage);
+                    enemyBullets.splice(i, 1);
+                    continue;
+                }
+
+                // Check collision with enemies of other factions
+                if (!hitObstacle && !hitWall) {
+                    let hitEnemy = false;
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const enemy = enemies[j];
+                        if (enemy.faction === bullet.faction) continue;
+                        if (bullet.x > enemy.x &&
+                            bullet.x < enemy.x + enemy.width &&
+                            bullet.y > enemy.y &&
+                            bullet.y < enemy.y + enemy.height) {
+                            enemy.health -= bullet.damage * 0.35;
+                            enemy.hitTimer = 10;
+                            createHitEffect(bullet.x, bullet.y, '#ff6666');
+                            const playerDistance = Math.hypot(bullet.x - (player.x + player.width / 2), bullet.y - (player.y + player.height / 2));
+                            playHitSound(playerDistance);
+                            createExplosion(bullet.x, bullet.y);
+                            hitEnemy = true;
+
+                            if (enemy.health <= 0) {
+                                killEnemy(j, false);
+                            }
+                            break;
+                        }
+                    }
+                    if (hitEnemy) {
+                        enemyBullets.splice(i, 1);
+                        continue;
+                    }
+                }
+
+                // Remove bullets that go off map or hit obstacles
+                if (hitObstacle || hitWall) {
+                    enemyBullets.splice(i, 1);
+                }
+            }
+        }
+
+        // Create explosion effect
+        function createExplosion(x, y) {
+            const particleCount = 8;
+            for (let i = 0; i < particleCount; i++) {
+                const angle = (i / particleCount) * Math.PI * 2;
+                const speed = 3 + Math.random() * 2;
+                particles.push({
+                    x: x,
+                    y: y,
+                    velocityX: Math.cos(angle) * speed,
+                    velocityY: Math.sin(angle) * speed,
+                    life: 20,
+                    maxLife: 20,
+                    size: 3 + Math.random() * 2,
+                    color: '#ff6600'
+                });
+            }
+        }
+
+        // Update particles
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].x += particles[i].velocityX;
+                particles[i].y += particles[i].velocityY;
+                particles[i].life--;
+
+                if (particles[i].life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function clamp(value, min, max) {
+            return Math.max(min, Math.min(max, value));
+        }
+
+        function addNoise(amount) {
+            noise.value = clamp(noise.value + amount, 0, 1);
+            noise.x = player.x + player.width / 2;
+            noise.y = player.y + player.height / 2;
+        }
+
+        function updateNoise() {
+            if (noise.value > 0) {
+                noise.value *= noise.decay;
+                if (noise.value < 0.005) {
+                    noise.value = 0;
+                }
+            }
+        }
+
+        function addScreenShake(intensity, duration) {
+            screenShake.intensity = Math.max(screenShake.intensity, intensity);
+            screenShake.timer = Math.max(screenShake.timer, duration);
+        }
+
+        function updateScreenShake() {
+            if (screenShake.timer > 0) {
+                screenShake.timer--;
+                screenShake.intensity *= screenShake.decay;
+                if (screenShake.timer <= 0 || screenShake.intensity < 0.1) {
+                    screenShake.timer = 0;
+                    screenShake.intensity = 0;
+                }
+            }
+
+            if (screenShake.intensity <= 0) {
+                return { x: 0, y: 0 };
+            }
+
+            const angle = Math.random() * Math.PI * 2;
+            const magnitude = Math.random() * screenShake.intensity;
+            return {
+                x: Math.cos(angle) * magnitude,
+                y: Math.sin(angle) * magnitude
+            };
+        }
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+
+        function playGunshot(distance) {
+            if (!audioContext) return;
+            const volume = clamp(1 - distance / hearingRadius, 0, 1);
+            if (volume <= 0) return;
+
+            const now = audioContext.currentTime;
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.35 * volume, now + 0.005);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+
+            const osc = audioContext.createOscillator();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(140, now);
+            osc.frequency.exponentialRampToValueAtTime(60, now + 0.08);
+
+            const noiseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.2, audioContext.sampleRate);
+            const data = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < data.length; i++) {
+                data[i] = (Math.random() * 2 - 1) * 0.6;
+            }
+            const noiseSource = audioContext.createBufferSource();
+            noiseSource.buffer = noiseBuffer;
+
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(1200, now);
+            filter.frequency.exponentialRampToValueAtTime(400, now + 0.12);
+
+            osc.connect(filter);
+            noiseSource.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioContext.destination);
+
+            osc.start(now);
+            noiseSource.start(now);
+            osc.stop(now + 0.2);
+            noiseSource.stop(now + 0.2);
+        }
+
+        function playHitSound(distance) {
+            if (!audioContext) return;
+            const volume = clamp(1 - distance / hearingRadius, 0, 1);
+            if (volume <= 0) return;
+
+            const now = audioContext.currentTime;
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(0.2 * volume, now);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+
+            const osc = audioContext.createOscillator();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.exponentialRampToValueAtTime(90, now + 0.1);
+
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            osc.start(now);
+            osc.stop(now + 0.12);
+        }
+
+        function createHitEffect(x, y, color) {
+            const particleCount = 6;
+            for (let i = 0; i < particleCount; i++) {
+                const angle = (i / particleCount) * Math.PI * 2;
+                const speed = 1.5 + Math.random() * 2;
+                particles.push({
+                    x: x,
+                    y: y,
+                    velocityX: Math.cos(angle) * speed,
+                    velocityY: Math.sin(angle) * speed,
+                    life: 14,
+                    maxLife: 14,
+                    size: 2 + Math.random() * 2,
+                    color: color
+                });
+            }
+        }
+
+        function rectsIntersect(ax, ay, aw, ah, bx, by, bw, bh) {
+            return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+        }
+
+        function checkObstacleCollision(x, y, width, height) {
+            for (let obstacle of obstacles) {
+                if (rectsIntersect(x, y, width, height, obstacle.x, obstacle.y, obstacle.width, obstacle.height)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function moveEntityWithCollisions(entity, velocityX, velocityY) {
+            let newX = entity.x + velocityX;
+            if (!checkObstacleCollision(newX, entity.y, entity.width, entity.height)) {
+                entity.x = newX;
+            }
+
+            let newY = entity.y + velocityY;
+            if (!checkObstacleCollision(entity.x, newY, entity.width, entity.height)) {
+                entity.y = newY;
+            }
+
+            entity.x = clamp(entity.x, 0, mapWidth - entity.width);
+            entity.y = clamp(entity.y, 0, mapHeight - entity.height);
+        }
+
+        function tryMoveEntity(entity, velocityX, velocityY) {
+            const newX = entity.x + velocityX;
+            const newY = entity.y + velocityY;
+            if (!checkObstacleCollision(newX, newY, entity.width, entity.height)) {
+                entity.x = newX;
+                entity.y = newY;
+                entity.x = clamp(entity.x, 0, mapWidth - entity.width);
+                entity.y = clamp(entity.y, 0, mapHeight - entity.height);
+                return true;
+            }
+            return false;
+        }
+
+        function moveTowardWithAvoidance(entity, targetX, targetY, speed) {
+            const centerX = entity.x + entity.width / 2;
+            const centerY = entity.y + entity.height / 2;
+            const dx = targetX - centerX;
+            const dy = targetY - centerY;
+            const distance = Math.hypot(dx, dy) || 1;
+            const vx = (dx / distance) * speed;
+            const vy = (dy / distance) * speed;
+
+            if (tryMoveEntity(entity, vx, vy)) {
+                return;
+            }
+
+            if (Math.abs(vx) > Math.abs(vy)) {
+                if (tryMoveEntity(entity, vx, 0)) return;
+                if (tryMoveEntity(entity, 0, vy)) return;
+            } else {
+                if (tryMoveEntity(entity, 0, vy)) return;
+                if (tryMoveEntity(entity, vx, 0)) return;
+            }
+
+            const perpX = -vy;
+            const perpY = vx;
+            const perpLen = Math.hypot(perpX, perpY) || 1;
+            const p1x = (perpX / perpLen) * speed;
+            const p1y = (perpY / perpLen) * speed;
+            const p2x = -p1x;
+            const p2y = -p1y;
+
+            const dist1 = Math.hypot((entity.x + p1x) - targetX, (entity.y + p1y) - targetY);
+            const dist2 = Math.hypot((entity.x + p2x) - targetX, (entity.y + p2y) - targetY);
+
+            if (dist1 <= dist2) {
+                if (tryMoveEntity(entity, p1x, p1y)) return;
+                tryMoveEntity(entity, p2x, p2y);
+            } else {
+                if (tryMoveEntity(entity, p2x, p2y)) return;
+                tryMoveEntity(entity, p1x, p1y);
+            }
+        }
+
+        function chooseWallFollowDirection(entity, targetX, targetY, speed) {
+            const centerX = entity.x + entity.width / 2;
+            const centerY = entity.y + entity.height / 2;
+            const dx = targetX - centerX;
+            const dy = targetY - centerY;
+            const distance = Math.hypot(dx, dy) || 1;
+
+            const perp1X = -dy / distance;
+            const perp1Y = dx / distance;
+            const perp2X = -perp1X;
+            const perp2Y = -perp1Y;
+
+            const step1X = perp1X * speed;
+            const step1Y = perp1Y * speed;
+            const step2X = perp2X * speed;
+            const step2Y = perp2Y * speed;
+
+            const can1 = !checkObstacleCollision(entity.x + step1X, entity.y + step1Y, entity.width, entity.height);
+            const can2 = !checkObstacleCollision(entity.x + step2X, entity.y + step2Y, entity.width, entity.height);
+
+            if (!can1 && !can2) {
+                return { x: 0, y: 0 };
+            }
+
+            if (can1 && !can2) return { x: perp1X, y: perp1Y };
+            if (!can1 && can2) return { x: perp2X, y: perp2Y };
+
+            const dist1 = Math.hypot((centerX + step1X) - targetX, (centerY + step1Y) - targetY);
+            const dist2 = Math.hypot((centerX + step2X) - targetX, (centerY + step2Y) - targetY);
+            return dist1 <= dist2 ? { x: perp1X, y: perp1Y } : { x: perp2X, y: perp2Y };
+        }
+
+        function moveAlongWall(entity, targetX, targetY, speed) {
+            if (entity.wallFollowTimer <= 0 || (entity.wallFollowDirX === 0 && entity.wallFollowDirY === 0)) {
+                const dir = chooseWallFollowDirection(entity, targetX, targetY, speed);
+                entity.wallFollowDirX = dir.x;
+                entity.wallFollowDirY = dir.y;
+                entity.wallFollowTimer = 90;
+            }
+
+            if (entity.wallFollowDirX === 0 && entity.wallFollowDirY === 0) {
+                return;
+            }
+
+            const stepX = entity.wallFollowDirX * speed;
+            const stepY = entity.wallFollowDirY * speed;
+            if (!tryMoveEntity(entity, stepX, stepY)) {
+                entity.wallFollowDirX = -entity.wallFollowDirX;
+                entity.wallFollowDirY = -entity.wallFollowDirY;
+                tryMoveEntity(entity, entity.wallFollowDirX * speed, entity.wallFollowDirY * speed);
+            }
+
+            entity.wallFollowTimer--;
+        }
+
+        function distancePointToSegment(px, py, ax, ay, bx, by) {
+            const dx = bx - ax;
+            const dy = by - ay;
+            if (dx === 0 && dy === 0) {
+                return Math.hypot(px - ax, py - ay);
+            }
+            const t = clamp(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy), 0, 1);
+            const closestX = ax + t * dx;
+            const closestY = ay + t * dy;
+            return Math.hypot(px - closestX, py - closestY);
+        }
+
+        function lineIntersectsRect(ax, ay, bx, by, rx, ry, rw, rh) {
+            const left = rx;
+            const right = rx + rw;
+            const top = ry;
+            const bottom = ry + rh;
+
+            const dx = bx - ax;
+            const dy = by - ay;
+
+            let t0 = 0;
+            let t1 = 1;
+
+            const p = [-dx, dx, -dy, dy];
+            const q = [ax - left, right - ax, ay - top, bottom - ay];
+
+            for (let i = 0; i < 4; i++) {
+                if (p[i] === 0) {
+                    if (q[i] < 0) return false;
+                } else {
+                    const t = q[i] / p[i];
+                    if (p[i] < 0) {
+                        if (t > t1) return false;
+                        if (t > t0) t0 = t;
+                    } else {
+                        if (t < t0) return false;
+                        if (t < t1) t1 = t;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        function hasLineOfSight(ax, ay, bx, by) {
+            for (let obstacle of obstacles) {
+                if (lineIntersectsRect(ax, ay, bx, by, obstacle.x, obstacle.y, obstacle.width, obstacle.height)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function raySegmentIntersection(ox, oy, dx, dy, x1, y1, x2, y2) {
+            const rdx = dx;
+            const rdy = dy;
+            const sdx = x2 - x1;
+            const sdy = y2 - y1;
+            const rxs = rdx * sdy - rdy * sdx;
+
+            if (rxs === 0) return null;
+
+            const qpx = x1 - ox;
+            const qpy = y1 - oy;
+            const t = (qpx * sdy - qpy * sdx) / rxs;
+            const u = (qpx * rdy - qpy * rdx) / rxs;
+
+            if (t >= 0 && u >= 0 && u <= 1) {
+                return { x: ox + rdx * t, y: oy + rdy * t, t };
+            }
+            return null;
+        }
+
+        function getVisibilityPolygon(originX, originY, radius) {
+            const angles = [];
+            const epsilon = 0.00005;
+            const occluderPadding = 1;
+
+            for (let a = 0; a < Math.PI * 2; a += Math.PI / 180) {
+                angles.push(a);
+            }
+
+            for (let obstacle of obstacles) {
+                const padded = {
+                    x: obstacle.x - occluderPadding,
+                    y: obstacle.y - occluderPadding,
+                    width: obstacle.width + occluderPadding * 2,
+                    height: obstacle.height + occluderPadding * 2
+                };
+                const corners = [
+                    { x: padded.x, y: padded.y },
+                    { x: padded.x + padded.width, y: padded.y },
+                    { x: padded.x + padded.width, y: padded.y + padded.height },
+                    { x: padded.x, y: padded.y + padded.height }
+                ];
+
+                for (let corner of corners) {
+                    const dist = Math.hypot(corner.x - originX, corner.y - originY);
+                    if (dist <= radius + 100) {
+                        const angle = Math.atan2(corner.y - originY, corner.x - originX);
+                        angles.push(angle - epsilon, angle - epsilon / 2, angle, angle + epsilon / 2, angle + epsilon);
+                    }
+                }
+            }
+
+            const segments = [];
+            for (let obstacle of obstacles) {
+                const padded = {
+                    x: obstacle.x - occluderPadding,
+                    y: obstacle.y - occluderPadding,
+                    width: obstacle.width + occluderPadding * 2,
+                    height: obstacle.height + occluderPadding * 2
+                };
+                segments.push(
+                    { x1: padded.x, y1: padded.y, x2: padded.x + padded.width, y2: padded.y },
+                    { x1: padded.x + padded.width, y1: padded.y, x2: padded.x + padded.width, y2: padded.y + padded.height },
+                    { x1: padded.x + padded.width, y1: padded.y + padded.height, x2: padded.x, y2: padded.y + padded.height },
+                    { x1: padded.x, y1: padded.y + padded.height, x2: padded.x, y2: padded.y }
+                );
+            }
+
+            segments.push(
+                { x1: 0, y1: 0, x2: mapWidth, y2: 0 },
+                { x1: mapWidth, y1: 0, x2: mapWidth, y2: mapHeight },
+                { x1: mapWidth, y1: mapHeight, x2: 0, y2: mapHeight },
+                { x1: 0, y1: mapHeight, x2: 0, y2: 0 }
+            );
+
+            const points = [];
+            for (let angle of angles) {
+                const dx = Math.cos(angle);
+                const dy = Math.sin(angle);
+                let closestT = radius;
+                let closest = { x: originX + dx * radius, y: originY + dy * radius, t: radius };
+
+                for (let seg of segments) {
+                    const hit = raySegmentIntersection(originX, originY, dx, dy, seg.x1, seg.y1, seg.x2, seg.y2);
+                    if (hit && hit.t > 0.01 && hit.t < closestT) {
+                        closestT = hit.t;
+                        closest = hit;
+                    }
+                }
+                points.push({ x: closest.x, y: closest.y, angle });
+            }
+
+            points.sort((a, b) => a.angle - b.angle);
+            return points;
+        }
+
+        function drawLightingEffect() {
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            
+            // Draw shadows for each obstacle
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            
+            for (let obstacle of obstacles) {
+                // Get obstacle corners
+                const corners = [
+                    { x: obstacle.x, y: obstacle.y },
+                    { x: obstacle.x + obstacle.width, y: obstacle.y },
+                    { x: obstacle.x + obstacle.width, y: obstacle.y + obstacle.height },
+                    { x: obstacle.x, y: obstacle.y + obstacle.height }
+                ];
+                
+                // Find which edges face away from player
+                const edges = [
+                    { p1: corners[0], p2: corners[1] }, // top
+                    { p1: corners[1], p2: corners[2] }, // right
+                    { p1: corners[2], p2: corners[3] }, // bottom
+                    { p1: corners[3], p2: corners[0] }  // left
+                ];
+                
+                for (let edge of edges) {
+                    // Calculate edge midpoint
+                    const midX = (edge.p1.x + edge.p2.x) / 2;
+                    const midY = (edge.p1.y + edge.p2.y) / 2;
+                    
+                    // Vector from player to edge midpoint
+                    const dx = midX - playerCenterX;
+                    const dy = midY - playerCenterY;
+                    
+                    // Edge normal (perpendicular to edge)
+                    const edgeDx = edge.p2.x - edge.p1.x;
+                    const edgeDy = edge.p2.y - edge.p1.y;
+                    const normalX = -edgeDy;
+                    const normalY = edgeDx;
+                    
+                    // Check if edge faces away from player (dot product)
+                    const dotProduct = dx * normalX + dy * normalY;
+                    
+                    if (dotProduct > 0) {
+                        // This edge faces away - cast shadow
+                        const shadowLength = 9600;
+                        
+                        // Project edge points away from player
+                        const dir1X = edge.p1.x - playerCenterX;
+                        const dir1Y = edge.p1.y - playerCenterY;
+                        const len1 = Math.max(1, Math.sqrt(dir1X * dir1X + dir1Y * dir1Y));
+                        const proj1X = edge.p1.x + (dir1X / len1) * shadowLength;
+                        const proj1Y = edge.p1.y + (dir1Y / len1) * shadowLength;
+                        
+                        const dir2X = edge.p2.x - playerCenterX;
+                        const dir2Y = edge.p2.y - playerCenterY;
+                        const len2 = Math.max(1, Math.sqrt(dir2X * dir2X + dir2Y * dir2Y));
+                        const proj2X = edge.p2.x + (dir2X / len2) * shadowLength;
+                        const proj2Y = edge.p2.y + (dir2Y / len2) * shadowLength;
+                        
+                        // Draw shadow quad
+                        ctx.beginPath();
+                        ctx.moveTo(edge.p1.x - camera.x, edge.p1.y - camera.y);
+                        ctx.lineTo(edge.p2.x - camera.x, edge.p2.y - camera.y);
+                        ctx.lineTo(proj2X - camera.x, proj2Y - camera.y);
+                        ctx.lineTo(proj1X - camera.x, proj1Y - camera.y);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                }
+            }
+        }
+
+        function drawDarknessOverlay() {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+        }
+
+        function getCoverPoint(enemy, targetX, targetY) {
+            const enemyCenterX = enemy.x + enemy.width / 2;
+            const enemyCenterY = enemy.y + enemy.height / 2;
+            let bestObstacle = null;
+            let bestScore = Infinity;
+
+            for (let obstacle of obstacles) {
+                const ox = obstacle.x + obstacle.width / 2;
+                const oy = obstacle.y + obstacle.height / 2;
+                const toEnemy = Math.hypot(enemyCenterX - ox, enemyCenterY - oy);
+                if (toEnemy > 700) continue;
+
+                const lineDist = distancePointToSegment(ox, oy, targetX, targetY, enemyCenterX, enemyCenterY);
+                const score = lineDist + toEnemy * 0.3;
+
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestObstacle = obstacle;
+                }
+            }
+
+            if (!bestObstacle) return null;
+
+            const centerX = bestObstacle.x + bestObstacle.width / 2;
+            const centerY = bestObstacle.y + bestObstacle.height / 2;
+            const dirX = centerX - targetX;
+            const dirY = centerY - targetY;
+            const length = Math.hypot(dirX, dirY) || 1;
+            const maxDim = Math.max(bestObstacle.width, bestObstacle.height);
+            const offset = maxDim / 2 + enemy.width / 2 + 6;
+            const coverX = clamp(centerX + (dirX / length) * offset, 0, mapWidth - enemy.width);
+            const coverY = clamp(centerY + (dirY / length) * offset, 0, mapHeight - enemy.height);
+            return { x: coverX, y: coverY };
+        }
+
+        function dropCoinsAt(x, y) {
+            const coinCount = 3 + Math.floor(Math.random() * 5);
+            for (let k = 0; k < coinCount; k++) {
+                const angle = (k / coinCount) * Math.PI * 2 + Math.random() * 0.5;
+                const distance = 20 + Math.random() * 20;
+                coins.push({
+                    x: x + Math.cos(angle) * distance,
+                    y: y + Math.sin(angle) * distance,
+                    size: 6,
+                    color: '#ffcc00',
+                    value: 1
+                });
+            }
+        }
+
+        function killEnemy(index, creditedToPlayer = false) {
+            const enemy = enemies[index];
+            dropCoinsAt(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+            if (creditedToPlayer) {
+                enemiesKilled++;
+                runEnemiesKilled++;
+            }
+            enemies.splice(index, 1);
+        }
+
+        function applyPlayerDamage(amount) {
+            if (player.invulnerable) return;
+            player.health -= amount;
+            player.invulnerable = true;
+            player.invulnerableTime = 30;
+            player.hitTimer = 10;
+            addScreenShake(10, 18);
+            createHitEffect(player.x + player.width / 2, player.y + player.height / 2, '#ffffff');
+            playHitSound(0);
+
+            if (player.health <= 0) {
+                for (let i = 0; i < 30; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 4;
+                    particles.push({
+                        x: player.x + player.width / 2,
+                        y: player.y + player.height / 2,
+                        velocityX: Math.cos(angle) * speed,
+                        velocityY: Math.sin(angle) * speed,
+                        life: 60,
+                        maxLife: 60,
+                        size: 4 + Math.random() * 4,
+                        color: Math.random() > 0.5 ? '#ff0000' : '#ff6600'
+                    });
+                }
+                gameState = 'death';
+                deathTimer = 0;
+                deathMoneyCount = 0;
+                deathKillsCount = 0;
+            }
+        }
+
+        function getEnemyTarget(enemy) {
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            const enemyCenterX = enemy.x + enemy.width / 2;
+            const enemyCenterY = enemy.y + enemy.height / 2;
+
+            const playerDistance = Math.hypot(playerCenterX - enemyCenterX, playerCenterY - enemyCenterY);
+            let bestTarget = { type: 'player', x: playerCenterX, y: playerCenterY, distance: playerDistance * 0.85 };
+
+            for (let other of enemies) {
+                if (other === enemy || other.faction === enemy.faction) continue;
+                const otherCenterX = other.x + other.width / 2;
+                const otherCenterY = other.y + other.height / 2;
+                const dist = Math.hypot(otherCenterX - enemyCenterX, otherCenterY - enemyCenterY);
+                if (dist < bestTarget.distance) {
+                    bestTarget = { type: 'enemy', enemy: other, x: otherCenterX, y: otherCenterY, distance: dist };
+                }
+            }
+
+            return bestTarget;
+        }
+
+        function getSpawnPointOffscreen(entityWidth, entityHeight) {
+            const padding = 80;
+            const viewX = camera.x - padding;
+            const viewY = camera.y - padding;
+            const viewW = canvas.width + padding * 2;
+            const viewH = canvas.height + padding * 2;
+
+            for (let i = 0; i < 60; i++) {
+                const x = Math.random() * (mapWidth - entityWidth);
+                const y = Math.random() * (mapHeight - entityHeight);
+
+                const inView = rectsIntersect(x, y, entityWidth, entityHeight, viewX, viewY, viewW, viewH);
+                if (inView) continue;
+                if (checkObstacleCollision(x, y, entityWidth, entityHeight)) continue;
+
+                return { x, y };
+            }
+
+            // Fallback: spawn at a random edge if offscreen search fails
+            let spawnX, spawnY;
+            const edge = Math.floor(Math.random() * 4);
+            switch(edge) {
+                case 0: // Top
+                    spawnX = Math.random() * mapWidth;
+                    spawnY = 0;
+                    break;
+                case 1: // Bottom
+                    spawnX = Math.random() * mapWidth;
+                    spawnY = mapHeight - entityHeight;
+                    break;
+                case 2: // Left
+                    spawnX = 0;
+                    spawnY = Math.random() * mapHeight;
+                    break;
+                case 3: // Right
+                    spawnX = mapWidth - entityWidth;
+                    spawnY = Math.random() * mapHeight;
+                    break;
+            }
+            return { x: clamp(spawnX, 0, mapWidth - entityWidth), y: clamp(spawnY, 0, mapHeight - entityHeight) };
+        }
+
+        // Spawn enemies based on difficulty
+        function spawnEnemies() {
+            spawnTimer--;
+            
+            // Spawn rate increases with difficulty
+            const spawnRate = Math.max(60, 180 - (difficulty * 8)); // Slower initial spawn, increases with level
+            
+            if (spawnTimer <= 0) {
+                spawnTimer = spawnRate;
+
+                let baseGroupSize = 2 + Math.floor(difficulty / 4);
+                if (difficulty >= 2) {
+                    baseGroupSize += 1;
+                }
+                const groupSize = Math.min(baseGroupSize, 8);
+                const factionCount = enemyFactions.length;
+
+                for (let f = 0; f < factionCount; f++) {
+                    const faction = enemyFactions[f];
+                    const groupSpawn = getSpawnPointOffscreen(40, 40);
+
+                    for (let i = 0; i < groupSize; i++) {
+                        const spread = 80;
+                        const x = clamp(groupSpawn.x + (Math.random() - 0.5) * spread, 0, mapWidth - 40);
+                        const y = clamp(groupSpawn.y + (Math.random() - 0.5) * spread, 0, mapHeight - 40);
+                        if (checkObstacleCollision(x, y, 40, 40)) {
+                            continue;
+                        }
+
+                        const variant = chooseEnemyVariant();
+                        const weaponId = variant === 'melee' ? null : (variant === 'special' ? chooseSpecialWeaponId() : chooseEnemyWeaponId());
+                        const weaponConfig = weaponId ? (enemyWeaponConfigs[weaponId] || enemyWeaponConfigs.handgun) : null;
+
+                        enemies.push({
+                            x: x,
+                            y: y,
+                            width: 40,
+                            height: 40,
+                            speed: variant === 'melee' ? 1.7 + (difficulty * 0.06) : 0.8 + (difficulty * 0.05),
+                            health: variant === 'special' ? 12 : (variant === 'melee' ? 5 : 3),
+                            faction: faction.id,
+                            color: variant === 'special' ? '#ffcc66' : (variant === 'melee' ? '#ff884d' : faction.color),
+                            weaponId: weaponId,
+                            variant: variant,
+                            meleeDamage: variant === 'melee' ? 16 : 10,
+                            behavior: variant === 'melee' ? 'melee' : 'shoot',
+                            behaviorTimer: 90 + Math.floor(Math.random() * 60),
+                            coverPoint: null,
+                            coverAction: 'cover',
+                            peekPoint: null,
+                            coverRecalcTimer: 0,
+                            shootCooldown: weaponConfig ? Math.floor(Math.random() * weaponConfig.fireCooldownFrames) : 0,
+                            alertTimer: 0,
+                            alertTargetX: 0,
+                            alertTargetY: 0,
+                            hitTimer: 0,
+                            wallFollowDirX: 0,
+                            wallFollowDirY: 0,
+                            wallFollowTimer: 0
+                        });
+                    }
+                }
+            }
+        }
+
+        // Update enemies
+        function updateEnemies() {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                const centerX = enemy.x + enemy.width / 2;
+                const centerY = enemy.y + enemy.height / 2;
+                const playerCenterX = player.x + player.width / 2;
+                const playerCenterY = player.y + player.height / 2;
+                const canSeePlayer = hasLineOfSight(centerX, centerY, playerCenterX, playerCenterY);
+                const isMelee = enemy.variant === 'melee';
+
+                if (canSeePlayer) {
+                    enemy.alertTimer = 300;
+                    enemy.alertTargetX = playerCenterX;
+                    enemy.alertTargetY = playerCenterY;
+                } else if (noise.value > 0) {
+                    const noiseRadius = noise.baseRadius + noise.value * noise.maxRadius;
+                    const distToNoise = Math.hypot(noise.x - centerX, noise.y - centerY);
+                    if (distToNoise <= noiseRadius) {
+                        enemy.alertTimer = 300;
+                        enemy.alertTargetX = noise.x;
+                        enemy.alertTargetY = noise.y;
+                    }
+                }
+
+                if (enemy.alertTimer > 0) {
+                    enemy.alertTimer--;
+                }
+
+                let target;
+                if (isMelee) {
+                    target = { type: 'player', x: playerCenterX, y: playerCenterY, distance: Math.hypot(playerCenterX - centerX, playerCenterY - centerY) };
+                } else if (canSeePlayer) {
+                    target = getEnemyTarget(enemy);
+                } else if (enemy.alertTimer > 0) {
+                    target = {
+                        type: 'noise',
+                        x: enemy.alertTargetX,
+                        y: enemy.alertTargetY,
+                        distance: Math.hypot(enemy.alertTargetX - centerX, enemy.alertTargetY - centerY)
+                    };
+                } else {
+                    target = getEnemyTarget(enemy);
+                }
+
+                const targetX = target.x;
+                const targetY = target.y;
+                const dx = targetX - centerX;
+                const dy = targetY - centerY;
+                const distance = Math.hypot(dx, dy) || 1;
+                const hasLOS = hasLineOfSight(centerX, centerY, targetX, targetY);
+
+                if (!isMelee) {
+                    enemy.behaviorTimer--;
+                    if (enemy.behaviorTimer <= 0) {
+                        if (enemy.behavior === 'shoot') {
+                            enemy.behavior = 'cover';
+                            enemy.behaviorTimer = 80 + Math.floor(Math.random() * 60);
+                            enemy.coverPoint = getCoverPoint(enemy, targetX, targetY);
+                            enemy.coverRecalcTimer = 40;
+                            enemy.peekPoint = null;
+                            const roll = Math.random();
+                            enemy.coverAction = roll < 0.5 ? 'cover' : roll < 0.8 ? 'peek' : 'hold';
+                            if (!enemy.coverPoint) {
+                                enemy.behavior = 'shoot';
+                                enemy.behaviorTimer = 100 + Math.floor(Math.random() * 80);
+                            }
+                        } else {
+                            enemy.behavior = 'shoot';
+                            enemy.behaviorTimer = 100 + Math.floor(Math.random() * 80);
+                            enemy.coverPoint = null;
+                            enemy.peekPoint = null;
+                        }
+                    }
+                }
+
+                let moveX = 0;
+                let moveY = 0;
+
+                if (isMelee) {
+                    moveTowardWithAvoidance(enemy, targetX, targetY, enemy.speed);
+                } else if (enemy.behavior === 'cover') {
+                    enemy.coverRecalcTimer--;
+                    if (!enemy.coverPoint || enemy.coverRecalcTimer <= 0) {
+                        enemy.coverPoint = getCoverPoint(enemy, targetX, targetY);
+                        enemy.coverRecalcTimer = 40;
+                        enemy.peekPoint = null;
+                    }
+
+                    if (enemy.coverPoint) {
+                        if (enemy.coverAction === 'cover') {
+                            const cdx = enemy.coverPoint.x - enemy.x;
+                            const cdy = enemy.coverPoint.y - enemy.y;
+                            const cdist = Math.hypot(cdx, cdy);
+                            if (cdist > 4) {
+                                moveX = (cdx / cdist) * enemy.speed;
+                                moveY = (cdy / cdist) * enemy.speed;
+                            }
+                        } else if (enemy.coverAction === 'peek') {
+                            if (!enemy.peekPoint) {
+                                const toTargetX = targetX - enemy.coverPoint.x;
+                                const toTargetY = targetY - enemy.coverPoint.y;
+                                const len = Math.hypot(toTargetX, toTargetY) || 1;
+                                const peekOffset = 80;
+                                enemy.peekPoint = {
+                                    x: clamp(enemy.coverPoint.x + (toTargetX / len) * peekOffset, 0, mapWidth - enemy.width),
+                                    y: clamp(enemy.coverPoint.y + (toTargetY / len) * peekOffset, 0, mapHeight - enemy.height)
+                                };
+                            }
+                            const pdx = enemy.peekPoint.x - enemy.x;
+                            const pdy = enemy.peekPoint.y - enemy.y;
+                            const pdist = Math.hypot(pdx, pdy);
+                            if (pdist > 4) {
+                                moveX = (pdx / pdist) * enemy.speed;
+                                moveY = (pdy / pdist) * enemy.speed;
+                            }
+                        }
+                    }
+                } else {
+                    const desiredRange = 240;
+                    if (!hasLOS) {
+                        moveAlongWall(enemy, targetX, targetY, enemy.speed);
+                    } else {
+                        enemy.wallFollowTimer = 0;
+                        enemy.wallFollowDirX = 0;
+                        enemy.wallFollowDirY = 0;
+                        if (distance > desiredRange * 1.1) {
+                            moveX = (dx / distance) * enemy.speed;
+                            moveY = (dy / distance) * enemy.speed;
+                        } else if (distance < desiredRange * 0.7) {
+                            moveX = (-dx / distance) * enemy.speed;
+                            moveY = (-dy / distance) * enemy.speed;
+                        }
+                    }
+                }
+
+                if (moveX !== 0 || moveY !== 0) {
+                    moveEntityWithCollisions(enemy, moveX, moveY);
+                }
+
+                // Re-evaluate LOS after movement for cover decisions
+                const movedCenterX = enemy.x + enemy.width / 2;
+                const movedCenterY = enemy.y + enemy.height / 2;
+                const movedHasLOS = hasLineOfSight(movedCenterX, movedCenterY, targetX, targetY);
+
+                if (!isMelee && enemy.behavior === 'cover' && enemy.coverAction !== 'hold') {
+                    if (enemy.coverAction === 'cover' && movedHasLOS) {
+                        enemy.coverAction = 'peek';
+                        enemy.peekPoint = null;
+                    } else if (enemy.coverAction === 'peek' && !movedHasLOS) {
+                        enemy.coverAction = 'cover';
+                    }
+                }
+
+                if (!isMelee && enemy.behavior === 'shoot') {
+                    if (enemy.shootCooldown > 0) {
+                        enemy.shootCooldown--;
+                    } else if (distance < 700 && movedHasLOS) {
+                        const weapon = getEnemyWeaponConfig(enemy);
+                        const shootDx = targetX - movedCenterX;
+                        const shootDy = targetY - movedCenterY;
+                        const shootDist = Math.hypot(shootDx, shootDy) || 1;
+                        const baseAngle = Math.atan2(shootDy, shootDx);
+                        for (let shot = 0; shot < weapon.shotsPerTrigger; shot++) {
+                            const spreadOffset = (Math.random() - 0.5) * weapon.spread;
+                            const angle = baseAngle + spreadOffset;
+                            enemyBullets.push({
+                                x: movedCenterX,
+                                y: movedCenterY,
+                                velocityX: Math.cos(angle) * weapon.bulletSpeed,
+                                velocityY: Math.sin(angle) * weapon.bulletSpeed,
+                                size: weapon.bulletSize,
+                                color: enemy.color,
+                                faction: enemy.faction,
+                                damage: weapon.damage,
+                                trail: [],
+                                trailMax: Math.max(bulletTrailMin, Math.min(bulletTrailMax, Math.round(weapon.bulletSpeed)))
+                            });
+                        }
+                        const playerDistance = Math.hypot(movedCenterX - playerCenterX, movedCenterY - playerCenterY);
+                        playGunshot(playerDistance);
+                        enemy.shootCooldown = weapon.fireCooldownFrames + Math.floor(Math.random() * 6);
+                    }
+                } else if (!isMelee && enemy.shootCooldown > 0) {
+                    enemy.shootCooldown--;
+                }
+
+                // Melee collision with player
+                if (rectsIntersect(enemy.x, enemy.y, enemy.width, enemy.height, player.x, player.y, player.width, player.height)) {
+                    applyPlayerDamage(enemy.meleeDamage || 10);
+                }
+
+                // Check collision with player bullets
+                let killed = false;
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    if (bullets[j].x > enemy.x && 
+                        bullets[j].x < enemy.x + enemy.width &&
+                        bullets[j].y > enemy.y && 
+                        bullets[j].y < enemy.y + enemy.height) {
+                        
+                        enemy.health -= bullets[j].damage || 1;
+                        enemy.hitTimer = 10;
+                        createHitEffect(bullets[j].x, bullets[j].y, '#ff6666');
+                        const playerDistance = Math.hypot(bullets[j].x - playerCenterX, bullets[j].y - playerCenterY);
+                        playHitSound(playerDistance);
+                        createExplosion(bullets[j].x, bullets[j].y);
+                        bullets.splice(j, 1);
+
+                        if (enemy.health <= 0) {
+                            killEnemy(i, true);
+                            killed = true;
+                        }
+                        break;
+                    }
+                }
+
+                if (killed) {
+                    continue;
+                }
+
+                if (enemy.hitTimer > 0) {
+                    enemy.hitTimer--;
+                }
+            }
+            
+            // Update invulnerability
+            if (player.invulnerable) {
+                player.invulnerableTime--;
+                if (player.invulnerableTime <= 0) {
+                    player.invulnerable = false;
+                }
+            }
+        }
+
+        // Update difficulty
+        function updateDifficulty() {
+            if (difficulty < maxDifficulty) {
+                difficultyProgress += difficultyIncreaseRate;
+                
+                // When progress reaches 100, level up and reset progress
+                if (difficultyProgress >= 100) {
+                    difficulty++;
+                    difficultyProgress = 0;
+                    
+                    if (difficulty > maxDifficulty) {
+                        difficulty = maxDifficulty;
+                    }
+                }
+            }
+        }
+
+        // Update coins
+        function updateCoins() {
+            const pickupRadius = 40;
+            
+            for (let i = coins.length - 1; i >= 0; i--) {
+                const coin = coins[i];
+                const dx = (player.x + player.width / 2) - coin.x;
+                const dy = (player.y + player.height / 2) - coin.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Magnetic pull only if within pickup radius
+                if (distance < pickupRadius && distance > 0) {
+                    const pullSpeed = 5;
+                    coin.x += (dx / distance) * pullSpeed;
+                    coin.y += (dy / distance) * pullSpeed;
+                    
+                    // Pick up coin if very close to player center
+                    if (distance < 10) {
+                        money += coin.value;
+                        runMoneyEarned += coin.value;
+                        coins.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        // Draw player
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(
+                player.x - camera.x,
+                player.y - camera.y,
+                player.width,
+                player.height
+            );
+
+            if (player.dashTimer > 0) {
+                ctx.globalAlpha = player.dashTimer / player.dashFrames;
+                ctx.fillStyle = '#66ff66';
+                ctx.fillRect(
+                    player.x - camera.x - player.dashVelocityX * 1.5,
+                    player.y - camera.y - player.dashVelocityY * 1.5,
+                    player.width,
+                    player.height
+                );
+                ctx.globalAlpha = 1;
+            }
+
+            if (player.meleeEffectTimer > 0) {
+                const centerX = player.x + player.width / 2 - camera.x;
+                const centerY = player.y + player.height / 2 - camera.y;
+                const angle = Math.atan2(player.meleeDirY, player.meleeDirX);
+                const arcSize = Math.PI * 0.85;
+                ctx.strokeStyle = '#ffeeaa';
+                ctx.lineWidth = 4;
+                ctx.globalAlpha = player.meleeEffectTimer / 8;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, player.meleeRange * 0.65, angle - arcSize / 2, angle + arcSize / 2);
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+            }
+
+            if (player.hitTimer > 0) {
+                ctx.globalAlpha = player.hitTimer / 10;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(
+                    player.x - camera.x,
+                    player.y - camera.y,
+                    player.width,
+                    player.height
+                );
+                ctx.globalAlpha = 1;
+            }
+
+            // Draw reload bar above player if reloading
+            if (player.isReloading) {
+                const barWidth = 40;
+                const barHeight = 5;
+                const barX = player.x - camera.x + player.width / 2 - barWidth / 2;
+                const barY = player.y - camera.y - 15;
+
+                // Background bar
+                ctx.fillStyle = '#333';
+                ctx.fillRect(barX, barY, barWidth, barHeight);
+
+                // Filled bar (green to red gradient)
+                const reloadProgress = 1 - (player.reloadTime / player.maxReloadTime);
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(barX, barY, barWidth * reloadProgress, barHeight);
+
+                // Border
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(barX, barY, barWidth, barHeight);
+            }
+        }
+
+        // Draw bullets
+        function drawBullets() {
+            for (let bullet of bullets) {
+                drawBulletTrail(bullet);
+                ctx.fillStyle = bullet.color;
+                ctx.beginPath();
+                ctx.arc(
+                    bullet.x - camera.x,
+                    bullet.y - camera.y,
+                    bullet.size,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+        }
+
+        // Draw enemy bullets
+        function drawEnemyBullets() {
+            for (let bullet of enemyBullets) {
+                drawBulletTrail(bullet);
+                ctx.fillStyle = bullet.color;
+                ctx.beginPath();
+                ctx.arc(
+                    bullet.x - camera.x,
+                    bullet.y - camera.y,
+                    bullet.size,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+        }
+
+        // Draw particles
+        function drawParticles() {
+            for (let particle of particles) {
+                ctx.fillStyle = particle.color;
+                ctx.globalAlpha = particle.life / particle.maxLife;
+                ctx.beginPath();
+                ctx.arc(
+                    particle.x - camera.x,
+                    particle.y - camera.y,
+                    particle.size,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // Draw enemies
+        function drawEnemies() {
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            for (let enemy of enemies) {
+                const enemyCenterX = enemy.x + enemy.width / 2;
+                const enemyCenterY = enemy.y + enemy.height / 2;
+                // Only check line of sight, no radius limit
+                if (!hasLineOfSight(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY)) {
+                    continue;
+                }
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(
+                    enemy.x - camera.x,
+                    enemy.y - camera.y,
+                    enemy.width,
+                    enemy.height
+                );
+
+                const label = enemy.variant === 'special' ? 'SPECIAL' : (enemy.variant === 'melee' ? 'MELEE' : (enemy.weaponId ? enemy.weaponId.toUpperCase() : 'RANGED'));
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(label, enemyCenterX - camera.x, enemy.y - camera.y - 4);
+
+                if (enemy.hitTimer > 0) {
+                    ctx.globalAlpha = enemy.hitTimer / 10;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(
+                        enemy.x - camera.x,
+                        enemy.y - camera.y,
+                        enemy.width,
+                        enemy.height
+                    );
+                    ctx.globalAlpha = 1;
+                }
+            }
+        }
+
+        // Draw coins
+        function drawCoins() {
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            for (let coin of coins) {
+                // Only check line of sight, no radius limit
+                if (!hasLineOfSight(playerCenterX, playerCenterY, coin.x, coin.y)) {
+                    continue;
+                }
+                ctx.fillStyle = coin.color;
+                ctx.beginPath();
+                ctx.arc(
+                    coin.x - camera.x,
+                    coin.y - camera.y,
+                    coin.size,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                
+                // Outline
+                ctx.strokeStyle = '#cc9900';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+
+        function drawBaseElements() {
+            for (let station of weaponStations) {
+                const isSelected = station.id === selectedWeaponId;
+                ctx.fillStyle = isSelected ? '#2f5d2f' : '#2a2a2a';
+                ctx.fillRect(
+                    station.x - camera.x,
+                    station.y - camera.y,
+                    station.width,
+                    station.height
+                );
+                ctx.strokeStyle = isSelected ? '#00ff00' : '#777777';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    station.x - camera.x,
+                    station.y - camera.y,
+                    station.width,
+                    station.height
+                );
+                ctx.fillStyle = isSelected ? '#ccffcc' : '#dddddd';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(
+                    weaponConfigs[station.id].name,
+                    station.x - camera.x + station.width / 2,
+                    station.y - camera.y + station.height / 2
+                );
+            }
+            
+            // Draw upgrade stations
+            for (let station of upgradeStations) {
+                const cost = getUpgradeCost(station.type);
+                const canAfford = money >= cost;
+                const level = upgrades[station.type].level;
+                
+                ctx.fillStyle = canAfford ? '#2a2f44' : '#2a2a2a';
+                ctx.fillRect(
+                    station.x - camera.x,
+                    station.y - camera.y,
+                    station.width,
+                    station.height
+                );
+                ctx.strokeStyle = canAfford ? '#4488ff' : '#555555';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    station.x - camera.x,
+                    station.y - camera.y,
+                    station.width,
+                    station.height
+                );
+                
+                // Draw upgrade name
+                ctx.fillStyle = canAfford ? '#ccddff' : '#888888';
+                ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                const labels = {
+                    damage: 'Damage',
+                    moveSpeed: 'Speed',
+                    fireSpeed: 'Fire Rate',
+                    reloadSpeed: 'Reload'
+                };
+                ctx.fillText(
+                    labels[station.type],
+                    station.x - camera.x + station.width / 2,
+                    station.y - camera.y + 6
+                );
+                
+                // Draw level
+                ctx.font = '10px Arial';
+                ctx.fillText(
+                    `Lv ${level}`,
+                    station.x - camera.x + station.width / 2,
+                    station.y - camera.y + 22
+                );
+                
+                // Draw cost
+                ctx.fillStyle = canAfford ? '#ffcc44' : '#666666';
+                ctx.font = 'bold 12px Arial';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(
+                    `$${cost}`,
+                    station.x - camera.x + station.width / 2,
+                    station.y - camera.y + station.height - 6
+                );
+            }
+
+            if (!baseDoorOpen) {
+                ctx.fillStyle = '#663300';
+                ctx.fillRect(
+                    baseDoorObstacle.x - camera.x,
+                    baseDoorObstacle.y - camera.y,
+                    baseDoorObstacle.width,
+                    baseDoorObstacle.height
+                );
+            } else {
+                ctx.strokeStyle = '#886633';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(
+                    baseDoorObstacle.x - camera.x,
+                    baseDoorObstacle.y - camera.y,
+                    baseDoorObstacle.width,
+                    baseDoorObstacle.height
+                );
+            }
+        }
+
+        function drawBasePrompts() {
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            const station = getNearbyWeaponStation(playerCenterX, playerCenterY);
+            const upgradeStation = getNearbyUpgradeStation(playerCenterX, playerCenterY);
+            const nearDoor = !baseDoorOpen && isPlayerNearDoor(playerCenterX, playerCenterY);
+
+            if (!station && !nearDoor && !upgradeStation) {
+                return;
+            }
+
+            let prompt = '';
+            if (station) {
+                prompt = `Press E to take ${weaponConfigs[station.id].name}`;
+            } else if (upgradeStation) {
+                const cost = getUpgradeCost(upgradeStation.type);
+                const labels = {
+                    damage: 'Damage',
+                    moveSpeed: 'Move Speed',
+                    fireSpeed: 'Fire Rate',
+                    reloadSpeed: 'Reload Speed'
+                };
+                if (money >= cost) {
+                    prompt = `Press E to upgrade ${labels[upgradeStation.type]} ($${cost})`;
+                } else {
+                    prompt = `${labels[upgradeStation.type]} upgrade: $${cost} (You have $${money})`;
+                }
+            } else if (nearDoor) {
+                prompt = 'Press E to open the door and start the run';
+            }
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(canvas.width / 2 - 220, canvas.height - 90, 440, 32);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(prompt, canvas.width / 2, canvas.height - 74);
+        }
+
+        // Draw difficulty bar at top of screen
+        function drawDifficultyBar() {
+            const barWidth = 300;
+            const barHeight = 20;
+            const barX = canvas.width / 2 - barWidth / 2;
+            const barY = 20;
+
+            // Background
+            ctx.fillStyle = '#333';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+
+            // Filled portion (gradient from green to red based on level)
+            const fillWidth = (difficultyProgress / 100) * barWidth;
+            const colorValue = Math.floor((difficulty / maxDifficulty) * 255);
+            ctx.fillStyle = `rgb(${colorValue}, ${255 - colorValue}, 0)`;
+            ctx.fillRect(barX, barY, fillWidth, barHeight);
+
+            // Border
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+            // Text
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`Level ${difficulty} - ${Math.floor(difficultyProgress)}%`, canvas.width / 2, barY + barHeight / 2);
+        }
+
+        // Draw money counter
+        function drawMoneyCounter() {
+            ctx.fillStyle = '#ffcc00';
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(`$${money}`, 20, 20);
+            
+            // Draw coin icon
+            ctx.beginPath();
+            ctx.arc(15, 27, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#cc9900';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        // Draw health bar
+        function drawHealthBar() {
+            const barWidth = 200;
+            const barHeight = 20;
+            const barX = 20;
+            const barY = 50;
+
+            // Background
+            ctx.fillStyle = '#333';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+
+            // Health fill (green to red based on health)
+            const healthPercent = player.health / player.maxHealth;
+            ctx.fillStyle = healthPercent > 0.5 ? '#00ff00' : healthPercent > 0.25 ? '#ffaa00' : '#ff0000';
+            ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+
+            // Border
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+            // Text
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`HP: ${player.health}/${player.maxHealth}`, barX + 5, barY + barHeight / 2);
+        }
+
+        function setBaseDoorOpen(open) {
+            baseDoorOpen = open;
+            const index = obstacles.indexOf(baseDoorObstacle);
+            if (open) {
+                if (index !== -1) {
+                    obstacles.splice(index, 1);
+                }
+            } else if (index === -1) {
+                obstacles.push(baseDoorObstacle);
+            }
+        }
+
+        function isPlayerNearDoor(playerCenterX, playerCenterY) {
+            const doorCenterX = baseDoorObstacle.x + baseDoorObstacle.width / 2;
+            const doorCenterY = baseDoorObstacle.y + baseDoorObstacle.height / 2;
+            return Math.hypot(playerCenterX - doorCenterX, playerCenterY - doorCenterY) <= baseInteractRange;
+        }
+
+        function getNearbyWeaponStation(playerCenterX, playerCenterY) {
+            for (let station of weaponStations) {
+                const centerX = station.x + station.width / 2;
+                const centerY = station.y + station.height / 2;
+                if (Math.hypot(playerCenterX - centerX, playerCenterY - centerY) <= weaponInteractRange) {
+                    return station;
+                }
+            }
+            return null;
+        }
+        
+        function getNearbyUpgradeStation(playerCenterX, playerCenterY) {
+            const interactRange = 80;
+            for (let station of upgradeStations) {
+                const centerX = station.x + station.width / 2;
+                const centerY = station.y + station.height / 2;
+                if (Math.hypot(playerCenterX - centerX, playerCenterY - centerY) <= interactRange) {
+                    return station;
+                }
+            }
+            return null;
+        }
+
+        function handleBaseInteract() {
+            if (gameState !== 'base') {
+                return false;
+            }
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            const station = getNearbyWeaponStation(playerCenterX, playerCenterY);
+            if (station) {
+                selectedWeaponId = station.id;
+                applySelectedWeapon(true);
+                return true;
+            }
+            const upgradeStation = getNearbyUpgradeStation(playerCenterX, playerCenterY);
+            if (upgradeStation) {
+                const cost = getUpgradeCost(upgradeStation.type);
+                if (money >= cost) {
+                    money -= cost;
+                    upgrades[upgradeStation.type].level++;
+                    applySelectedWeapon(false);
+                    playSound(800, 0.1, 'sine');
+                    return true;
+                } else {
+                    playSound(150, 0.08, 'square');
+                }
+            }
+            if (!baseDoorOpen && isPlayerNearDoor(playerCenterX, playerCenterY)) {
+                window.location.href = `game.html?${buildGameStateQuery()}`;
+                return true;
+            }
+            return false;
+        }
+
+        function resetRunState() {
+            isPaused = false;
+            player.health = player.maxHealth;
+            applySelectedWeapon(true);
+            player.isReloading = false;
+            player.fireCooldown = 0;
+            player.invulnerable = false;
+            player.invulnerableTime = 0;
+            player.hitTimer = 0;
+            player.dashCooldown = 0;
+            player.dashTimer = 0;
+            player.dashVelocityX = 0;
+            player.dashVelocityY = 0;
+            player.meleeCooldown = 0;
+            player.meleeEffectTimer = 0;
+            mouseButtons.left = false;
+            screenShake.intensity = 0;
+            screenShake.timer = 0;
+            difficulty = 1;
+            difficultyProgress = 0;
+            enemies.length = 0;
+            bullets.length = 0;
+            enemyBullets.length = 0;
+            coins.length = 0;
+            particles.length = 0;
+            spawnTimer = 0;
+            runEnemiesKilled = 0;
+            runMoneyEarned = 0;
+        }
+
+        function resetToBase() {
+            resetRunState();
+            player.x = baseConfig.x + baseConfig.width / 2 - player.width / 2;
+            player.y = baseConfig.y + baseConfig.height / 2 - player.height / 2;
+            setBaseDoorOpen(false);
+            deathTimer = 0;
+            deathMoneyCount = 0;
+            deathKillsCount = 0;
+            continueButtonHover = false;
+        }
+
+        function enterBase() {
+            loadTransientStateFromQuery();
+            applySelectedWeapon(false);
+            resetToBase();
+            gameState = 'base';
+        }
+
+        function startRunFromBase() {
+            if (gameState !== 'base') {
+                return;
+            }
+            setBaseDoorOpen(true);
+            resetRunState();
+            gameState = 'playing';
+        }
+
+        // Draw hub screen
+        function drawHubScreen() {
+            // Background
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Title
+            ctx.fillStyle = '#00ff00';
+            ctx.font = 'bold 64px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('EXTRACTION SHOOTER', canvas.width / 2, canvas.height / 3);
+
+            // Money display
+            ctx.fillStyle = '#ffcc00';
+            ctx.font = 'bold 32px Arial';
+            ctx.fillText(`Money: $${money}`, canvas.width / 2, canvas.height / 2 - 20);
+            
+            // Total kills
+            ctx.fillStyle = '#ff6666';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText(`Total Kills: ${enemiesKilled}`, canvas.width / 2, canvas.height / 2 + 20);
+
+            // Instructions
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '22px Arial';
+            ctx.fillText('Controls: WASD move, Left Click shoot, Right Click melee, Space dash', canvas.width / 2, canvas.height / 2 + 90);
+            ctx.fillText('E interact, R reload, ESC pause', canvas.width / 2, canvas.height / 2 + 122);
+
+            const playButton = getHubPlayButton();
+            ctx.fillStyle = '#1f1f1f';
+            ctx.fillRect(playButton.x, playButton.y, playButton.width, playButton.height);
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(playButton.x, playButton.y, playButton.width, playButton.height);
+            ctx.fillStyle = '#00ff00';
+            ctx.font = 'bold 24px Arial';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('PLAY', playButton.x + playButton.width / 2, playButton.y + playButton.height / 2);
+
+            ctx.font = '18px Arial';
+            ctx.fillStyle = '#aaaaaa';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText('Press Space or click Play to enter the base', canvas.width / 2, canvas.height - 100);
+        }
+
+        // Update death screen
+        function updateDeathScreen() {
+            deathTimer++;
+            
+            const explosionDuration = 200;
+            
+            // Count up money after explosion + 120 frames (2 seconds)
+            if (deathTimer > explosionDuration + 120 && deathMoneyCount < runMoneyEarned) {
+                deathMoneyCount += Math.ceil((runMoneyEarned - deathMoneyCount) * 0.1);
+                if (deathMoneyCount > runMoneyEarned) deathMoneyCount = runMoneyEarned;
+            }
+            
+            // Count up kills after explosion + 180 frames (3 seconds)
+            if (deathTimer > explosionDuration + 180 && deathKillsCount < runEnemiesKilled) {
+                deathKillsCount += Math.ceil((runEnemiesKilled - deathKillsCount) * 0.1);
+                if (deathKillsCount > runEnemiesKilled) deathKillsCount = runEnemiesKilled;
+            }
+        }
+
+        // Draw death screen
+        function drawDeathScreen() {
+            // Slow motion effect on particles
+            const slowMoFactor = 0.3;
+            
+            // Update particles in slow motion
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].x += particles[i].velocityX * slowMoFactor;
+                particles[i].y += particles[i].velocityY * slowMoFactor;
+                particles[i].life -= 0.3;
+
+                if (particles[i].life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+            
+            // Draw game background dimmed
+            drawBackground();
+            drawObstacles();
+            drawEnemies();
+            drawBullets();
+            drawEnemyBullets();
+            drawParticles();
+            
+            // Only start showing overlay after explosion finishes (200 frames = ~3.3 seconds in slow-mo)
+            const explosionDuration = 200;
+            
+            // Dark overlay - starts after explosion
+            if (deathTimer > explosionDuration) {
+                const overlayAlpha = Math.min((deathTimer - explosionDuration) / 60, 0.8);
+                ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            // "YOU DIED" text - fade in after overlay starts
+            if (deathTimer > explosionDuration + 30) {
+                const textAlpha = Math.min((deathTimer - explosionDuration - 30) / 60, 1);
+                ctx.globalAlpha = textAlpha;
+                ctx.fillStyle = '#ff0000';
+                ctx.font = 'bold 96px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('YOU DIED', canvas.width / 2, canvas.height / 3);
+                ctx.globalAlpha = 1;
+            }
+            
+            // Stats - appear after "YOU DIED"
+            if (deathTimer > explosionDuration + 90) {
+                const statsAlpha = Math.min((deathTimer - explosionDuration - 90) / 30, 1);
+                ctx.globalAlpha = statsAlpha;
+                
+                // Money earned
+                ctx.fillStyle = '#ffcc00';
+                ctx.font = 'bold 32px Arial';
+                ctx.fillText(`Money Earned: $${deathMoneyCount}`, canvas.width / 2, canvas.height / 2 + 20);
+                
+                // Enemies killed
+                ctx.fillStyle = '#ff6666';
+                ctx.fillText(`Enemies Killed: ${deathKillsCount}`, canvas.width / 2, canvas.height / 2 + 70);
+                
+                ctx.globalAlpha = 1;
+            }
+            
+            // Continue button - appears after stats finish counting
+            if (deathTimer > explosionDuration + 240 && deathMoneyCount >= runMoneyEarned && deathKillsCount >= runEnemiesKilled) {
+                const buttonAlpha = Math.min((deathTimer - explosionDuration - 240) / 30, 1);
+                ctx.globalAlpha = buttonAlpha;
+                
+                const buttonWidth = 200;
+                const buttonHeight = 50;
+                const buttonX = canvas.width / 2 - buttonWidth / 2;
+                const buttonY = canvas.height / 2 + 140;
+                
+                // Button background
+                ctx.fillStyle = continueButtonHover ? '#00aa00' : '#008800';
+                ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+                
+                // Button border
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight);
+                
+                // Button text
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('CONTINUE', canvas.width / 2, buttonY + buttonHeight / 2);
+                
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // Draw pause overlay
+        function drawPauseOverlay() {
+            // Semi-transparent overlay
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Pause text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '48px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+
+            // Instructions
+            ctx.font = '24px Arial';
+            ctx.fillText('Press ESC to resume', canvas.width / 2, canvas.height / 2 + 50);
+        }
+
+        // Draw background
+        function drawBackground() {
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw map grid pattern
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            const gridSize = 100;
+
+            for (let x = -camera.x % gridSize; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+
+            for (let y = -camera.y % gridSize; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        // Draw obstacles
+        function drawObstacles() {
+            ctx.fillStyle = '#555';
+            for (let obstacle of obstacles) {
+                ctx.fillRect(
+                    obstacle.x - camera.x,
+                    obstacle.y - camera.y,
+                    obstacle.width,
+                    obstacle.height
+                );
+            }
+        }
+
+        // Game loop
+        function gameLoop() {
+            if (gameState === 'hub') {
+                drawHubScreen();
+            } else if (gameState === 'death') {
+                updateDeathScreen();
+                drawDeathScreen();
+            } else if (gameState === 'base') {
+                const shakeOffset = updateScreenShake();
+
+                ctx.save();
+                ctx.translate(shakeOffset.x, shakeOffset.y);
+                drawBackground();
+
+                if (!isPaused) {
+                    updatePlayer();
+                    updateBullets();
+                    updateHitscanEffects();
+                    updateParticles();
+                    updateNoise();
+                }
+
+                drawPlayer();
+                drawBullets();
+                drawHitscanEffects();
+                drawParticles();
+
+                drawObstacles();
+                drawBaseElements();
+
+                ctx.restore();
+
+                drawMoneyCounter();
+                drawHealthBar();
+                drawBasePrompts();
+
+                if (isPaused) {
+                    drawPauseOverlay();
+                }
+            } else if (gameState === 'playing') {
+                const shakeOffset = updateScreenShake();
+
+                ctx.save();
+                ctx.translate(shakeOffset.x, shakeOffset.y);
+                drawBackground();
+                
+                if (!isPaused) {
+                    updatePlayer();
+                    updateBullets();
+                    updateEnemyBullets();
+                    updateHitscanEffects();
+                    updateParticles();
+                    updateNoise();
+                    updateDifficulty();
+                    spawnEnemies();
+                    updateEnemies();
+                    updateCoins();
+                }
+                
+                drawPlayer();
+                drawBullets();
+                drawEnemyBullets();
+                drawHitscanEffects();
+                drawParticles();
+                drawCoins();
+                drawEnemies();
+                
+                // Draw lighting effect before obstacles
+                drawLightingEffect();
+
+                // Draw obstacles on top so they're always visible
+                drawObstacles();
+                drawBaseElements();
+
+                ctx.restore();
+                
+                drawDifficultyBar();
+                drawMoneyCounter();
+                drawHealthBar();
+
+                if (isPaused) {
+                    drawPauseOverlay();
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        enterBase();
+
+        // Start game
+        gameLoop();
+    </script>
+</body>
+</html>
