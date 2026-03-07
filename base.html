@@ -23,6 +23,7 @@
             display: block;
             width: 100%;
             height: 100%;
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='6'/%3E%3Cpath d='M12 2v4M12 18v4M2 12h4M18 12h4'/%3E%3C/g%3E%3C/svg%3E") 12 12, crosshair;
         }
     </style>
 </head>
@@ -337,6 +338,9 @@
 
         // Audio
         let audioContext = null;
+        const coinPickupSoundSrc = 'Menu Selection Click.wav';
+        const coinPickupSoundTemplate = new Audio(coinPickupSoundSrc);
+        coinPickupSoundTemplate.preload = 'auto';
 
         // Particles array for explosions
         const particles = [];
@@ -1339,6 +1343,11 @@
             }
         }
 
+        function playCoinPickupSound() {
+            const sound = coinPickupSoundTemplate.cloneNode();
+            sound.play().catch(() => {});
+        }
+
         function playGunshot(distance) {
             if (!audioContext) return;
             const volume = clamp(1 - distance / hearingRadius, 0, 1);
@@ -2276,6 +2285,7 @@
                     if (distance < 10) {
                         money += coin.value;
                         runMoneyEarned += coin.value;
+                        playCoinPickupSound();
                         coins.splice(i, 1);
                     }
                 }
