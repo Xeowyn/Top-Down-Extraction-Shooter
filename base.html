@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Top Down Extraction Shooter</title>
+    <title>Mousehunt: Extraction — Base</title>
     <style>
         * {
             margin: 0;
@@ -63,13 +63,107 @@
 
         const baseInteractRange = 70;
         const weaponInteractRange = 60;
-        const baseWeaponIds = ['handgun', 'ar', 'rifle', 'shotgun'];
+        const baseWeaponIds = ['handgun', 'smg', 'ar', 'rifle', 'shotgun', 'flamethrower', 'acidShooter', 'crossbow', 'burstRifle', 'sawedOffShotgun'];
+        const mainWeaponIds = ['ar', 'rifle', 'shotgun', 'flamethrower', 'acidShooter', 'crossbow', 'burstRifle'];
+        const sidearmIds = ['handgun', 'smg', 'sawedOffShotgun'];
         const weaponUnlockCosts = {
             handgun: 0,
+            smg: 400,
             ar: 750,
             shotgun: 1000,
-            rifle: 1500
+            rifle: 1500,
+            flamethrower: 2000,
+            acidShooter: 1800,
+            crossbow: 1400,
+            burstRifle: 1600,
+            sawedOffShotgun: 800
         };
+
+        // Grenade system
+        const grenadeTypes = {
+            fire: { name: 'Fire', color: '#ff6600' },
+            ice: { name: 'Ice', color: '#88eeff' },
+            smoke: { name: 'Smoke', color: '#aaaaaa' },
+            heal: { name: 'Heal', color: '#88ff88' }
+        };
+        const grenadeIds = ['fire', 'ice', 'smoke', 'heal'];
+        const grenadeBaseCost = 30;
+        const grenadeMaxCount = 5;
+        function getEffectiveGrenadeMax() {
+            return grenadeMaxCount + (learnedSkills.passive.includes('packRat') ? 2 : 0);
+        }
+        let equippedGrenadeType = 'fire';
+        let grenadeCount = 0;
+
+        // Weapon mod system
+        const weaponModDefs = {
+            expandedMag: { name: 'Expanded Mag', cost: 400, desc: '+50% ammo' },
+            fastLoader:  { name: 'Fast Loader',  cost: 350, desc: '-30% reload' },
+            hollowPoint: { name: 'Hollow Point', cost: 300, desc: '+25% damage' },
+            piercing:    { name: 'Piercing',     cost: 500, desc: 'Pierce 1 enemy' },
+            silencer:    { name: 'Silencer',     cost: 600, desc: 'Silent fire' },
+            incendiary:  { name: 'Incendiary',   cost: 450, desc: 'Apply burn' },
+            cryoRound:   { name: 'Cryo Round',   cost: 450, desc: 'Slow enemies' },
+            foregrip:    { name: 'Foregrip',     cost: 300, desc: '-40% spread' },
+            drumMag:     { name: 'Drum Mag',     cost: 600, desc: '2x ammo/+40% reload' },
+            acidTip:     { name: 'Acid Tip',     cost: 400, desc: 'Apply acid DoT' }
+        };
+        const weaponModIds = Object.keys(weaponModDefs);
+        let equippedMods = { main: [], sidearm: [] };
+        const modStations = [];
+
+        // Skill system
+        const passiveSkillDefs = {
+            nimble:       { name: 'Nimble',        cost: 300, desc: '+15% speed' },
+            ironHide:     { name: 'Iron Hide',     cost: 400, desc: '+30 max HP' },
+            scavenger:    { name: 'Scavenger',     cost: 250, desc: '+20% loot' },
+            lightFoot:    { name: 'Light Foot',    cost: 350, desc: 'Quieter steps' },
+            quickHands:   { name: 'Quick Hands',   cost: 300, desc: '-20% swap time' },
+            adrenaline:   { name: 'Adrenaline',    cost: 500, desc: 'Speed burst on kill' },
+            packRat:      { name: 'Pack Rat',      cost: 200, desc: '+2 grenade slots' },
+            toughPaws:    { name: 'Tough Paws',    cost: 350, desc: '-20% dash cooldown' },
+            sharpFangs:   { name: 'Sharp Fangs',   cost: 600, desc: '+20% damage' },
+            hairTrigger:  { name: 'Hair Trigger',  cost: 550, desc: '-25% fire cooldown' },
+            speedLoader:  { name: 'Speed Loader',  cost: 500, desc: '-25% reload time' },
+            longArms:     { name: 'Long Arms',     cost: 300, desc: '+80px pickup range' }
+        };
+        const activeSkillDefs = {
+            smokeCloak:   { name: 'Smoke Cloak', cost: 800,  desc: 'Invisible 4s [Z]' },
+            frenzy:       { name: 'Frenzy',      cost: 1000, desc: '2x fire rate 5s [X]' },
+            shieldBubble: { name: 'Shield',      cost: 1200, desc: 'Block 3 hits [C]' },
+            rally:        { name: 'Rally',       cost: 700,  desc: '+25 HP instant [V]' }
+        };
+        const passiveSkillIds = Object.keys(passiveSkillDefs);
+        const activeSkillIds = Object.keys(activeSkillDefs);
+        let learnedSkills = { passive: [], active: [] };
+        const skillStations = [];
+
+        // Level select
+        let currentLevel = 1;
+        const unlockedLevelIds = (() => { try { return JSON.parse(localStorage.getItem('mh_unlockedLevels') || '[1]'); } catch(e) { return [1]; } })();
+        const levelDefs = [
+            { id: 1, name: 'THE HOUSE',  desc: 'Warm & dangerous', color: '#c8a060', unlocked: true },
+            { id: 2, name: 'BASEMENT',   desc: 'Dark & damp',      color: '#7799cc', unlocked: unlockedLevelIds.includes(2) },
+            { id: 3, name: 'ATTIC',      desc: 'Dusty & eerie',    color: '#cc9966', unlocked: unlockedLevelIds.includes(3) },
+            { id: 4, name: 'THE YARD',   desc: 'Wide open danger',  color: '#88cc44', unlocked: unlockedLevelIds.includes(4) }
+        ];
+        const levelStations = [];
+
+        // Cosmetics — skin system (persists in localStorage)
+        const skinDefs = {
+            default:  { name: 'Mouse',    body: '#c8927a', bodyStroke: '#8b5e3c', ear: '#e8a0b0', earStroke: '#c87080', tail: '#c8927a', feet: '#b07858', cost: 0 },
+            albino:   { name: 'Albino',   body: '#f5f0e8', bodyStroke: '#c8c0b0', ear: '#ffaacc', earStroke: '#e890a8', tail: '#f0e0d8', feet: '#ddd0c0', cost: 300 },
+            shadow:   { name: 'Shadow',   body: '#404050', bodyStroke: '#22222a', ear: '#887088', earStroke: '#553355', tail: '#303040', feet: '#353540', cost: 400 },
+            tawny:    { name: 'Tawny',    body: '#c87830', bodyStroke: '#7a4a10', ear: '#e89850', earStroke: '#c07030', tail: '#b06820', feet: '#a05820', cost: 250 },
+            arctic:   { name: 'Arctic',   body: '#dceeff', bodyStroke: '#88aad0', ear: '#aaccff', earStroke: '#6699cc', tail: '#c0dcff', feet: '#b0cce8', cost: 500 },
+            cheddar:  { name: 'Cheddar',  body: '#e8a020', bodyStroke: '#c07000', ear: '#ffe060', earStroke: '#d4a800', tail: '#d09000', feet: '#c08000', cost: 350 },
+            midnight: { name: 'Midnight', body: '#302850', bodyStroke: '#181030', ear: '#6644aa', earStroke: '#442288', tail: '#241c40', feet: '#201838', cost: 600 }
+        };
+        const skinIds = Object.keys(skinDefs);
+        let equippedSkinId = localStorage.getItem('mh_equippedSkin') || 'default';
+        let unlockedSkins = JSON.parse(localStorage.getItem('mh_unlockedSkins') || '["default"]');
+        if (!unlockedSkins.includes('default')) unlockedSkins.push('default');
+        const wardrobeStations = [];
 
         // Camera object
         const camera = {
@@ -128,6 +222,7 @@
         let baseDoorOpen = false;
         const weaponStations = [];
         const upgradeStations = [];
+        const grenadeStations = [];
         const stationWidth = 70;
         const stationHeight = 26;
         const stationGap = 14;
@@ -176,36 +271,128 @@
             }
 
             weaponStations.length = 0;
-            const stationY = baseConfig.y + baseConfig.wallThickness + 14;
-            const stationsWidth = baseWeaponIds.length * stationWidth + (baseWeaponIds.length - 1) * stationGap;
-            let stationX = baseConfig.x + baseConfig.width / 2 - stationsWidth / 2;
-            for (let id of baseWeaponIds) {
+            // Row 1: Main weapons
+            const mainStationY = baseConfig.y + baseConfig.wallThickness + 14;
+            const mainStationsWidth = mainWeaponIds.length * stationWidth + (mainWeaponIds.length - 1) * stationGap;
+            let mainStationX = baseConfig.x + baseConfig.width / 2 - mainStationsWidth / 2;
+            for (let id of mainWeaponIds) {
                 weaponStations.push({
                     id,
-                    x: stationX,
-                    y: stationY,
+                    x: mainStationX,
+                    y: mainStationY,
                     width: stationWidth,
-                    height: stationHeight
+                    height: stationHeight,
+                    row: 'main'
                 });
-                stationX += stationWidth + stationGap;
+                mainStationX += stationWidth + stationGap;
+            }
+            // Row 2: Sidearms
+            const sidearmStationY = mainStationY + stationHeight + 10;
+            const sidearmStationsWidth = sidearmIds.length * stationWidth + (sidearmIds.length - 1) * stationGap;
+            let sidearmStationX = baseConfig.x + baseConfig.width / 2 - sidearmStationsWidth / 2;
+            for (let id of sidearmIds) {
+                weaponStations.push({
+                    id,
+                    x: sidearmStationX,
+                    y: sidearmStationY,
+                    width: stationWidth,
+                    height: stationHeight,
+                    row: 'sidearm'
+                });
+                sidearmStationX += stationWidth + stationGap;
             }
             
-            // Create upgrade stations on left side
+            // Upgrade stations removed — upgrades now available via passive skills
             upgradeStations.length = 0;
-            const upgradeStationWidth = 120;
-            const upgradeStationHeight = 80;
-            const upgradeGap = 15;
-            const upgradeTypes = ['damage', 'moveSpeed', 'fireSpeed', 'reloadSpeed', 'maxHealth', 'pickupRange'];
-            const upgradeStartY = baseConfig.y + baseConfig.height / 2 - (upgradeTypes.length * upgradeStationHeight + (upgradeTypes.length - 1) * upgradeGap) / 2;
-            const upgradeX = baseConfig.x + baseConfig.wallThickness + 20;
-            
-            for (let i = 0; i < upgradeTypes.length; i++) {
-                upgradeStations.push({
-                    type: upgradeTypes[i],
-                    x: upgradeX,
-                    y: upgradeStartY + i * (upgradeStationHeight + upgradeGap),
-                    width: upgradeStationWidth,
-                    height: upgradeStationHeight
+
+            // Grenade supply stations — top-right quadrant
+            grenadeStations.length = 0;
+            const gStationWidth = 100;
+            const gStationHeight = 56;
+            const gGap = 8;
+            const gX = baseConfig.x + baseConfig.width - baseConfig.wallThickness - gStationWidth - 20;
+            const gStartY = baseConfig.y + baseConfig.wallThickness + 14;
+            for (let i = 0; i < grenadeIds.length; i++) {
+                grenadeStations.push({
+                    type: grenadeIds[i],
+                    x: gX,
+                    y: gStartY + i * (gStationHeight + gGap),
+                    width: gStationWidth,
+                    height: gStationHeight
+                });
+            }
+
+            // Weapon mod stations — right side, below grenades
+            modStations.length = 0;
+            const modW = 120, modH = 28, modGap = 5;
+            const modX = baseConfig.x + baseConfig.width - baseConfig.wallThickness - modW - 20;
+            const modStartY = gStartY + grenadeIds.length * (gStationHeight + gGap) + 20;
+            for (let i = 0; i < weaponModIds.length; i++) {
+                modStations.push({
+                    id: weaponModIds[i],
+                    x: modX,
+                    y: modStartY + i * (modH + modGap),
+                    width: modW,
+                    height: modH
+                });
+            }
+
+            // Skill stations — center area (passive left-col, active right-col)
+            skillStations.length = 0;
+            const skW = 110, skH = 38, skGap = 6;
+            const skCenterX = baseConfig.x + baseConfig.width / 2;
+            const skY = baseConfig.y + baseConfig.height / 2 + 40;
+            // Passive skills (left column)
+            for (let i = 0; i < passiveSkillIds.length; i++) {
+                skillStations.push({
+                    id: passiveSkillIds[i],
+                    type: 'passive',
+                    x: skCenterX - skW - 10,
+                    y: skY + i * (skH + skGap),
+                    width: skW, height: skH
+                });
+            }
+            // Active skills (right column)
+            for (let i = 0; i < activeSkillIds.length; i++) {
+                skillStations.push({
+                    id: activeSkillIds[i],
+                    type: 'active',
+                    x: skCenterX + 10,
+                    y: skY + i * (skH + skGap),
+                    width: skW, height: skH
+                });
+            }
+
+            // Wardrobe stations — bottom-left area (skins)
+            wardrobeStations.length = 0;
+            const wdW = 80, wdH = 56, wdCols = 2, wdGap = 8;
+            const wdX = baseConfig.x + baseConfig.wallThickness + 20;
+            const wdY = baseConfig.y + baseConfig.height - baseConfig.wallThickness - (Math.ceil(skinIds.length / wdCols) * (wdH + wdGap)) - 80;
+            for (let i = 0; i < skinIds.length; i++) {
+                const col = i % wdCols;
+                const row = Math.floor(i / wdCols);
+                wardrobeStations.push({
+                    id: skinIds[i],
+                    x: wdX + col * (wdW + wdGap),
+                    y: wdY + row * (wdH + wdGap),
+                    width: wdW,
+                    height: wdH
+                });
+            }
+
+            // Level select stations — bottom center (above door)
+            levelStations.length = 0;
+            const lvlW = 100, lvlH = 50, lvlGap = 12;
+            const lvlTotalW = levelDefs.length * lvlW + (levelDefs.length - 1) * lvlGap;
+            const lvlStartX = baseConfig.x + baseConfig.width / 2 - lvlTotalW / 2;
+            const lvlY = baseConfig.y + baseConfig.height - baseConfig.wallThickness - lvlH - 70;
+            for (let i = 0; i < levelDefs.length; i++) {
+                levelStations.push({
+                    ...levelDefs[i],
+                    x: lvlStartX + i * (lvlW + lvlGap),
+                    y: lvlY,
+                    width: lvlW,
+                    height: lvlH
                 });
             }
         }
@@ -220,53 +407,55 @@
         const bulletTrailAlpha = 0.45;
         const weaponConfigs = {
             handgun: {
-                id: 'handgun',
-                name: 'Handgun',
-                maxAmmo: 10,
-                reloadFrames: 120,
-                bulletSpeed: 10.5,
-                bulletSize: 5,
-                damage: 1,
-                shotsPerTrigger: 1,
-                spread: 0,
-                fireCooldownFrames: 0
+                id: 'handgun', name: 'Handgun', maxAmmo: 10, reloadFrames: 120,
+                bulletSpeed: 10.5, bulletSize: 5, damage: 1, shotsPerTrigger: 1,
+                spread: 0, fireCooldownFrames: 0, category: 'sidearm'
+            },
+            smg: {
+                id: 'smg', name: 'SMG', maxAmmo: 36, reloadFrames: 160,
+                bulletSpeed: 11, bulletSize: 3, damage: 1.6, shotsPerTrigger: 1,
+                spread: 0.28, fireCooldownFrames: 5, category: 'sidearm'
             },
             ar: {
-                id: 'ar',
-                name: 'AR',
-                maxAmmo: 24,
-                reloadFrames: 240,
-                bulletSpeed: 12,
-                bulletSize: 4,
-                damage: 1,
-                shotsPerTrigger: 1,
-                spread: 0.39,
-                fireCooldownFrames: 10
+                id: 'ar', name: 'AR', maxAmmo: 24, reloadFrames: 240,
+                bulletSpeed: 12, bulletSize: 4, damage: 1, shotsPerTrigger: 1,
+                spread: 0.39, fireCooldownFrames: 10, category: 'main'
             },
             rifle: {
-                id: 'rifle',
-                name: 'Rifle',
-                maxAmmo: 8,
-                reloadFrames: 420,
-                bulletSpeed: 45,
-                bulletSize: 5,
-                damage: 7,
-                shotsPerTrigger: 1,
-                spread: 0.03,
-                fireCooldownFrames: 120,
-                range: 2200
+                id: 'rifle', name: 'Rifle', maxAmmo: 8, reloadFrames: 420,
+                bulletSpeed: 45, bulletSize: 5, damage: 7, shotsPerTrigger: 1,
+                spread: 0.03, fireCooldownFrames: 120, range: 2200, category: 'main'
             },
             shotgun: {
-                id: 'shotgun',
-                name: 'Shotgun',
-                maxAmmo: 6,
-                reloadFrames: 150,
-                bulletSpeed: 9,
-                bulletSize: 4,
-                damage: 0.7,
-                shotsPerTrigger: 6,
-                spread: 0.75,
-                fireCooldownFrames: 75
+                id: 'shotgun', name: 'Shotgun', maxAmmo: 6, reloadFrames: 150,
+                bulletSpeed: 9, bulletSize: 4, damage: 0.7, shotsPerTrigger: 6,
+                spread: 0.75, fireCooldownFrames: 75, category: 'main'
+            },
+            flamethrower: {
+                id: 'flamethrower', name: 'Flamethrower', maxAmmo: 50, reloadFrames: 300,
+                bulletSpeed: 7, bulletSize: 8, damage: 0.8, shotsPerTrigger: 1,
+                spread: 0.5, fireCooldownFrames: 3, category: 'main', appliesBurn: true,
+                burnDamage: 1.5, burnDuration: 120, color: '#ff4400'
+            },
+            acidShooter: {
+                id: 'acidShooter', name: 'Acid Gun', maxAmmo: 8, reloadFrames: 200,
+                bulletSpeed: 8, bulletSize: 7, damage: 2, shotsPerTrigger: 1,
+                spread: 0.1, fireCooldownFrames: 25, category: 'main', appliesAcid: true, color: '#aaff00'
+            },
+            crossbow: {
+                id: 'crossbow', name: 'Crossbow', maxAmmo: 6, reloadFrames: 360,
+                bulletSpeed: 16, bulletSize: 5, damage: 8, shotsPerTrigger: 1,
+                spread: 0.02, fireCooldownFrames: 80, category: 'main', silent: true, color: '#884400'
+            },
+            burstRifle: {
+                id: 'burstRifle', name: 'Burst Rifle', maxAmmo: 30, reloadFrames: 260,
+                bulletSpeed: 13, bulletSize: 4, damage: 3.5, shotsPerTrigger: 1,
+                spread: 0.09, fireCooldownFrames: 55, burstCount: 3, burstDelay: 5, category: 'main'
+            },
+            sawedOffShotgun: {
+                id: 'sawedOffShotgun', name: 'Sawed-Off', maxAmmo: 4, reloadFrames: 95,
+                bulletSpeed: 8.5, bulletSize: 6, damage: 4.5, shotsPerTrigger: 7,
+                spread: 0.95, fireCooldownFrames: 55, category: 'sidearm'
             }
         };
         const enemyWeaponConfigs = {
@@ -307,12 +496,19 @@
                 fireCooldownFrames: 80
             }
         };
-        let selectedWeaponId = 'handgun';
+        let selectedWeaponId = '';
+        let sidearmId = 'handgun';
         const unlockedWeapons = {
             handgun: true,
+            smg: false,
             ar: false,
             rifle: false,
-            shotgun: false
+            shotgun: false,
+            flamethrower: false,
+            acidShooter: false,
+            crossbow: false,
+            burstRifle: false,
+            sawedOffShotgun: false
         };
 
         // Enemy bullets array
@@ -375,12 +571,14 @@
         let difficultyProgress = 0; // 0 to 100 for current level
         let difficultyIncreaseRate = 0.02261; // Per frame (1.33x faster)
         let spawnTimer = 0;
-        let money = 0;
+        let money = parseInt(localStorage.getItem('mh_bankedCrumbs') || '0', 10);
+        function saveBankedCrumbs() { localStorage.setItem('mh_bankedCrumbs', String(Math.max(0, Math.floor(money)))); }
         let enemiesKilled = 0;
         let runEnemiesKilled = 0;
         let runMoneyEarned = 0;
         
         // Upgrade system
+        const UPGRADE_MAX_LEVEL = 5;
         const upgrades = {
             damage: { level: 0, baseCost: 50, multiplier: 1.5 },
             moveSpeed: { level: 0, baseCost: 40, multiplier: 1.5 },
@@ -406,9 +604,13 @@
 
         function resetWeaponUnlocks() {
             unlockedWeapons.handgun = true;
+            unlockedWeapons.smg = false;
             unlockedWeapons.ar = false;
             unlockedWeapons.rifle = false;
             unlockedWeapons.shotgun = false;
+            unlockedWeapons.flamethrower = false;
+            unlockedWeapons.acidShooter = false;
+            unlockedWeapons.crossbow = false;
         }
 
         function isWeaponUnlocked(weaponId) {
@@ -455,14 +657,46 @@
             loadUnlockedWeaponsFromQuery(params);
 
             const queryWeaponId = params.get('weapon');
-            if (queryWeaponId && weaponConfigs[queryWeaponId] && isWeaponUnlocked(queryWeaponId)) {
+            const hasMainUnlocked = Object.keys(weaponConfigs).some(id => weaponConfigs[id].category === 'main' && isWeaponUnlocked(id));
+            if (queryWeaponId && weaponConfigs[queryWeaponId] && isWeaponUnlocked(queryWeaponId) && weaponConfigs[queryWeaponId].category !== 'sidearm') {
                 selectedWeaponId = queryWeaponId;
+            } else if (hasMainUnlocked) {
+                selectedWeaponId = Object.keys(weaponConfigs).find(id => weaponConfigs[id].category === 'main' && isWeaponUnlocked(id)) || '';
             } else {
-                selectedWeaponId = 'handgun';
+                selectedWeaponId = '';
             }
 
-            const queryMoney = Number.parseInt(params.get('money') || '0', 10);
-            money = Number.isFinite(queryMoney) ? Math.max(0, queryMoney) : 0;
+            const querySidearmId = params.get('sidearm');
+            if (querySidearmId && weaponConfigs[querySidearmId] && isWeaponUnlocked(querySidearmId) && weaponConfigs[querySidearmId].category === 'sidearm') {
+                sidearmId = querySidearmId;
+            } else {
+                sidearmId = 'handgun';
+            }
+
+            // Banked crumbs live in localStorage — never loaded from URL
+            money = parseInt(localStorage.getItem('mh_bankedCrumbs') || '0', 10);
+
+            // Load grenade loadout
+            const queryGrenadeType = params.get('grenadeType');
+            equippedGrenadeType = (queryGrenadeType && grenadeTypes[queryGrenadeType]) ? queryGrenadeType : 'fire';
+            const queryGrenadeCount = Number.parseInt(params.get('grenadeCount') || '0', 10);
+            grenadeCount = Number.isFinite(queryGrenadeCount) ? Math.max(0, queryGrenadeCount) : 0;
+
+            // Load weapon mods
+            const qModsMain = params.get('modsMain') || '';
+            const qModsSidearm = params.get('modsSidearm') || '';
+            equippedMods.main = qModsMain ? qModsMain.split(',').filter(id => weaponModDefs[id]) : [];
+            equippedMods.sidearm = qModsSidearm ? qModsSidearm.split(',').filter(id => weaponModDefs[id]) : [];
+
+            // Load skills
+            const qPassive = params.get('passiveSkills') || '';
+            const qActive = params.get('activeSkills') || '';
+            learnedSkills.passive = qPassive ? qPassive.split(',').filter(id => passiveSkillDefs[id]) : [];
+            learnedSkills.active = qActive ? qActive.split(',').filter(id => activeSkillDefs[id]) : [];
+
+            // Load level
+            const qLevel = Number.parseInt(params.get('level') || '1', 10);
+            currentLevel = [1,2,3,4].includes(qLevel) ? qLevel : 1;
 
             resetUpgradeLevels();
             const damageLevel = Number.parseInt(params.get('upgDamage') || '0', 10);
@@ -482,8 +716,17 @@
         function buildGameStateQuery() {
             const params = new URLSearchParams();
             params.set('weapon', selectedWeaponId);
+            params.set('sidearm', sidearmId);
             params.set('unlocked', buildUnlockedWeaponsParam());
-            params.set('money', String(Math.max(0, Math.floor(money))));
+            params.set('money', '0'); // banked crumbs stay in localStorage, not passed to level
+            params.set('grenadeType', equippedGrenadeType);
+            params.set('grenadeCount', String(Math.max(0, grenadeCount)));
+            params.set('modsMain', equippedMods.main.join(','));
+            params.set('modsSidearm', equippedMods.sidearm.join(','));
+            params.set('passiveSkills', learnedSkills.passive.join(','));
+            params.set('activeSkills', learnedSkills.active.join(','));
+            params.set('level', String(currentLevel));
+            params.set('skin', equippedSkinId);
             params.set('upgDamage', String(Math.max(0, upgrades.damage.level)));
             params.set('upgMoveSpeed', String(Math.max(0, upgrades.moveSpeed.level)));
             params.set('upgFireSpeed', String(Math.max(0, upgrades.fireSpeed.level)));
@@ -2285,6 +2528,7 @@
                     if (distance < 10) {
                         money += coin.value;
                         runMoneyEarned += coin.value;
+                        saveBankedCrumbs();
                         playCoinPickupSound();
                         coins.splice(i, 1);
                     }
@@ -2293,51 +2537,83 @@
         }
 
         // Draw player
+        function drawMouseCharacter(cx, cy, angle, hitFlash, alpha, skin) {
+            const s = skin || skinDefs[equippedSkinId] || skinDefs.default;
+            ctx.save();
+            ctx.globalAlpha = alpha !== undefined ? alpha : 1;
+            ctx.translate(cx, cy);
+            ctx.rotate(angle);
+            // Tail
+            ctx.save();
+            ctx.strokeStyle = s.tail;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-10, 0);
+            ctx.bezierCurveTo(-22, 8, -28, -6, -32, 4);
+            ctx.stroke();
+            ctx.restore();
+            // Body
+            ctx.fillStyle = hitFlash ? '#ffffff' : s.body;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 14, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = s.bodyStroke;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            // Ears
+            ctx.fillStyle = hitFlash ? '#ffffff' : s.ear;
+            ctx.beginPath(); ctx.arc(-6, -12, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = s.earStroke; ctx.lineWidth = 1; ctx.stroke();
+            ctx.beginPath(); ctx.arc(4, -13, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            // Snout
+            ctx.fillStyle = hitFlash ? '#ffffff' : s.ear;
+            ctx.beginPath(); ctx.arc(15, 0, 4, 0, Math.PI * 2); ctx.fill();
+            // Nose
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(18, 0, 1.5, 0, Math.PI * 2); ctx.fill();
+            // Eyes
+            ctx.fillStyle = '#222';
+            ctx.beginPath(); ctx.arc(9, -5, 2, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(9, 5, 2, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(10, -5.5, 0.7, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(10, 4.5, 0.7, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
         function drawPlayer() {
-            ctx.fillStyle = player.color;
-            ctx.fillRect(
-                player.x - camera.x,
-                player.y - camera.y,
-                player.width,
-                player.height
+            const cx = player.x + player.width / 2 - camera.x;
+            const cy = player.y + player.height / 2 - camera.y;
+            const angle = Math.atan2(
+                (mousePosition.y + camera.y) - (player.y + player.height / 2),
+                (mousePosition.x + camera.x) - (player.x + player.width / 2)
             );
+            const hitFlash = player.hitTimer > 0;
 
             if (player.dashTimer > 0) {
-                ctx.globalAlpha = player.dashTimer / player.dashFrames;
-                ctx.fillStyle = '#66ff66';
-                ctx.fillRect(
-                    player.x - camera.x - player.dashVelocityX * 1.5,
-                    player.y - camera.y - player.dashVelocityY * 1.5,
-                    player.width,
-                    player.height
+                drawMouseCharacter(
+                    cx - player.dashVelocityX * 1.5,
+                    cy - player.dashVelocityY * 1.5,
+                    angle, false, (player.dashTimer / player.dashFrames) * 0.5
                 );
-                ctx.globalAlpha = 1;
             }
 
             if (player.meleeEffectTimer > 0) {
-                const centerX = player.x + player.width / 2 - camera.x;
-                const centerY = player.y + player.height / 2 - camera.y;
-                const angle = Math.atan2(player.meleeDirY, player.meleeDirX);
                 const arcSize = Math.PI * 0.85;
+                const meleeAngle = Math.atan2(player.meleeDirY, player.meleeDirX);
                 ctx.strokeStyle = '#ffeeaa';
                 ctx.lineWidth = 4;
                 ctx.globalAlpha = player.meleeEffectTimer / 8;
                 ctx.beginPath();
-                ctx.arc(centerX, centerY, player.meleeRange * 0.65, angle - arcSize / 2, angle + arcSize / 2);
+                ctx.arc(cx, cy, player.meleeRange * 0.65, meleeAngle - arcSize / 2, meleeAngle + arcSize / 2);
                 ctx.stroke();
                 ctx.globalAlpha = 1;
             }
 
+            drawMouseCharacter(cx, cy, angle, hitFlash, 1);
+
             if (player.hitTimer > 0) {
-                ctx.globalAlpha = player.hitTimer / 10;
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(
-                    player.x - camera.x,
-                    player.y - camera.y,
-                    player.width,
-                    player.height
-                );
-                ctx.globalAlpha = 1;
+                // already handled via hitFlash in drawMouseCharacter
             }
 
             // Draw reload bar above player if reloading
@@ -2483,93 +2759,268 @@
         }
 
         function drawBaseElements() {
+            // Row labels
+            if (weaponStations.length > 0) {
+                const mainRow = weaponStations.find(s => s.row === 'main');
+                const sideRow = weaponStations.find(s => s.row === 'sidearm');
+                ctx.fillStyle = '#c8a060';
+                ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                if (mainRow) ctx.fillText('MAIN WEAPONS', mainRow.x - camera.x, mainRow.y - camera.y - 2);
+                if (sideRow) ctx.fillText('SIDEARMS', sideRow.x - camera.x, sideRow.y - camera.y - 2);
+            }
+
             for (let station of weaponStations) {
                 const unlocked = isWeaponUnlocked(station.id);
-                const isSelected = unlocked && station.id === selectedWeaponId;
-                ctx.fillStyle = unlocked ? (isSelected ? '#2f5d2f' : '#2a2a2a') : '#2a2222';
-                ctx.fillRect(
-                    station.x - camera.x,
-                    station.y - camera.y,
-                    station.width,
-                    station.height
+                const isSelected = unlocked && (
+                    (station.row === 'main' && station.id === selectedWeaponId) ||
+                    (station.row === 'sidearm' && station.id === sidearmId)
                 );
-                ctx.strokeStyle = unlocked ? (isSelected ? '#00ff00' : '#777777') : '#aa6666';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(
-                    station.x - camera.x,
-                    station.y - camera.y,
-                    station.width,
-                    station.height
-                );
-                ctx.fillStyle = unlocked ? (isSelected ? '#ccffcc' : '#dddddd') : '#ff9999';
-                ctx.font = '12px Arial';
+                ctx.fillStyle = unlocked ? (isSelected ? '#4a3a10' : '#2a2a2a') : '#2a2222';
+                ctx.fillRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                ctx.strokeStyle = unlocked ? (isSelected ? '#e8c060' : '#777777') : '#aa6666';
+                ctx.lineWidth = isSelected ? 2.5 : 1.5;
+                ctx.strokeRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                ctx.fillStyle = unlocked ? (isSelected ? '#ffe080' : '#dddddd') : '#ff9999';
+                ctx.font = isSelected ? 'bold 12px Arial' : '12px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(
-                    unlocked ? weaponConfigs[station.id].name : 'LOCK',
+                    unlocked ? weaponConfigs[station.id].name : 'LOCKED',
                     station.x - camera.x + station.width / 2,
                     station.y - camera.y + station.height / 2
                 );
+                if (!unlocked) {
+                    ctx.fillStyle = '#aa8844';
+                    ctx.font = '9px Arial';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText(`$${weaponUnlockCosts[station.id]}`, station.x - camera.x + station.width / 2, station.y - camera.y + station.height - 2);
+                }
+            }
+
+            // Grenade section label
+            if (grenadeStations.length > 0) {
+                const first = grenadeStations[0];
+                ctx.fillStyle = '#c8a060';
+                ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('SUPPLIES ($30 each)', first.x - camera.x, first.y - camera.y - 2);
+            }
+
+            for (let station of grenadeStations) {
+                const gType = grenadeTypes[station.type] || {};
+                const isEquipped = equippedGrenadeType === station.type && grenadeCount > 0;
+                ctx.fillStyle = isEquipped ? 'rgba(60,40,10,0.9)' : 'rgba(30,25,20,0.8)';
+                ctx.fillRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                ctx.strokeStyle = isEquipped ? (gType.color || '#ffffff') : '#554433';
+                ctx.lineWidth = isEquipped ? 2.5 : 1.5;
+                ctx.strokeRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+
+                // Color circle
+                ctx.fillStyle = gType.color || '#888888';
+                ctx.beginPath();
+                ctx.arc(station.x - camera.x + 18, station.y - camera.y + 22, 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#dddddd';
+                ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(gType.name || station.type, station.x - camera.x + 32, station.y - camera.y + 6);
+
+                ctx.fillStyle = '#aa8844';
+                ctx.font = '10px Arial';
+                ctx.fillText(`$${grenadeBaseCost}`, station.x - camera.x + 32, station.y - camera.y + 22);
+
+                if (isEquipped) {
+                    ctx.fillStyle = '#ffe080';
+                    ctx.font = 'bold 11px Arial';
+                    ctx.textBaseline = 'bottom';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`x${grenadeCount}`, station.x - camera.x + station.width / 2, station.y - camera.y + station.height - 4);
+                }
             }
             
-            // Draw upgrade stations
-            for (let station of upgradeStations) {
-                const cost = getUpgradeCost(station.type);
-                const canAfford = money >= cost;
-                const level = upgrades[station.type].level;
-                
-                ctx.fillStyle = canAfford ? '#2a2f44' : '#2a2a2a';
-                ctx.fillRect(
-                    station.x - camera.x,
-                    station.y - camera.y,
-                    station.width,
-                    station.height
-                );
-                ctx.strokeStyle = canAfford ? '#4488ff' : '#555555';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(
-                    station.x - camera.x,
-                    station.y - camera.y,
-                    station.width,
-                    station.height
-                );
-                
-                // Draw upgrade name
-                ctx.fillStyle = canAfford ? '#ccddff' : '#888888';
+            // Upgrade stations removed — handled by passive skills
+
+            // ARMORY — weapon mod stations
+            if (modStations.length > 0) {
+                ctx.fillStyle = '#c8a060';
                 ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('ARMORY', modStations[0].x - camera.x, modStations[0].y - camera.y - 2);
+            }
+            for (let station of modStations) {
+                const def = weaponModDefs[station.id];
+                const onMain = equippedMods.main.includes(station.id);
+                const onSide = equippedMods.sidearm.includes(station.id);
+                const isEquipped = onMain || onSide;
+                ctx.fillStyle = isEquipped ? 'rgba(40,30,10,0.9)' : 'rgba(25,22,18,0.8)';
+                ctx.fillRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                ctx.strokeStyle = isEquipped ? '#e8c060' : '#554433';
+                ctx.lineWidth = isEquipped ? 2 : 1;
+                ctx.strokeRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                ctx.fillStyle = isEquipped ? '#ffe080' : '#dddddd';
+                ctx.font = 'bold 9px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(def.name, station.x - camera.x + 5, station.y - camera.y + 4);
+                ctx.fillStyle = '#999999';
+                ctx.font = '8px Arial';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(def.desc, station.x - camera.x + 5, station.y - camera.y + station.height - 3);
+                ctx.textAlign = 'right';
+                if (isEquipped) {
+                    ctx.fillStyle = onMain ? '#ffe080' : '#88ccff';
+                    ctx.font = 'bold 8px Arial';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(onMain ? 'MAIN' : 'SIDE', station.x - camera.x + station.width - 4, station.y - camera.y + 4);
+                } else {
+                    ctx.fillStyle = '#aa8844';
+                    ctx.font = '8px Arial';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText('$' + def.cost, station.x - camera.x + station.width - 4, station.y - camera.y + 4);
+                }
+            }
+
+            // SKILLS — passive + active skill stations
+            const firstPassive = skillStations.find(s => s.type === 'passive');
+            const firstActive  = skillStations.find(s => s.type === 'active');
+            ctx.font = 'bold 11px Arial';
+            ctx.textBaseline = 'bottom';
+            if (firstPassive) {
+                ctx.fillStyle = '#88ffaa';
+                ctx.textAlign = 'center';
+                ctx.fillText('PASSIVE', firstPassive.x - camera.x + firstPassive.width / 2, firstPassive.y - camera.y - 2);
+            }
+            if (firstActive) {
+                ctx.fillStyle = '#ffaa88';
+                ctx.textAlign = 'center';
+                ctx.fillText('ACTIVE', firstActive.x - camera.x + firstActive.width / 2, firstActive.y - camera.y - 2);
+            }
+            for (let station of skillStations) {
+                const def = station.type === 'passive' ? passiveSkillDefs[station.id] : activeSkillDefs[station.id];
+                const isLearned = station.type === 'passive'
+                    ? learnedSkills.passive.includes(station.id)
+                    : learnedSkills.active.includes(station.id);
+                ctx.fillStyle = isLearned ? 'rgba(10,40,20,0.9)' : 'rgba(22,20,28,0.85)';
+                ctx.fillRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                ctx.strokeStyle = isLearned ? '#44cc88' : (station.type === 'passive' ? '#447744' : '#774444');
+                ctx.lineWidth = isLearned ? 2 : 1;
+                ctx.strokeRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                ctx.fillStyle = isLearned ? '#88ffcc' : '#dddddd';
+                ctx.font = 'bold 9px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                const labels = {
-                    damage: 'Damage',
-                    moveSpeed: 'Speed',
-                    fireSpeed: 'Fire Rate',
-                    reloadSpeed: 'Reload',
-                    maxHealth: 'Max HP',
-                    pickupRange: 'Pickup'
-                };
-                ctx.fillText(
-                    labels[station.type],
-                    station.x - camera.x + station.width / 2,
-                    station.y - camera.y + 6
-                );
-                
-                // Draw level
-                ctx.font = '10px Arial';
-                ctx.fillText(
-                    `Lv ${level}`,
-                    station.x - camera.x + station.width / 2,
-                    station.y - camera.y + 22
-                );
-                
-                // Draw cost
-                ctx.fillStyle = canAfford ? '#ffcc44' : '#666666';
-                ctx.font = 'bold 12px Arial';
+                ctx.fillText(def.name, station.x - camera.x + station.width / 2, station.y - camera.y + 5);
+                ctx.fillStyle = '#999999';
+                ctx.font = '8px Arial';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(def.desc, station.x - camera.x + station.width / 2, station.y - camera.y + station.height / 2 + 3);
                 ctx.textBaseline = 'bottom';
-                ctx.fillText(
-                    `$${cost}`,
-                    station.x - camera.x + station.width / 2,
-                    station.y - camera.y + station.height - 6
-                );
+                if (isLearned) {
+                    ctx.fillStyle = '#44cc88';
+                    ctx.font = 'bold 8px Arial';
+                    ctx.fillText('LEARNED', station.x - camera.x + station.width / 2, station.y - camera.y + station.height - 3);
+                } else {
+                    ctx.fillStyle = '#aa8844';
+                    ctx.font = '8px Arial';
+                    ctx.fillText('$' + def.cost, station.x - camera.x + station.width / 2, station.y - camera.y + station.height - 3);
+                }
+            }
+
+            // LEVEL SELECT — stations near the door
+            if (levelStations.length > 0) {
+                const midX = levelStations[0].x - camera.x + (levelStations[levelStations.length - 1].x + levelStations[levelStations.length - 1].width - levelStations[0].x) / 2;
+                ctx.fillStyle = '#c8a060';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('SELECT LEVEL', midX, levelStations[0].y - camera.y - 4);
+            }
+            for (let station of levelStations) {
+                const isSelected = currentLevel === station.id;
+                const isLocked = !station.unlocked;
+                ctx.fillStyle = isLocked ? 'rgba(20,18,18,0.85)' : (isSelected ? 'rgba(50,35,10,0.95)' : 'rgba(28,24,20,0.85)');
+                ctx.fillRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                ctx.strokeStyle = isLocked ? '#3a3030' : (isSelected ? station.color : '#555544');
+                ctx.lineWidth = isSelected ? 3 : 1.5;
+                ctx.strokeRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                ctx.fillStyle = isLocked ? '#555555' : (isSelected ? station.color : '#cccccc');
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillText(station.name, station.x - camera.x + station.width / 2, station.y - camera.y + 7);
+                ctx.fillStyle = isLocked ? '#444444' : '#999999';
+                ctx.font = '9px Arial';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(isLocked ? 'Extract to unlock' : station.desc, station.x - camera.x + station.width / 2, station.y - camera.y + station.height / 2 + 4);
+                if (isSelected) {
+                    ctx.fillStyle = station.color;
+                    ctx.font = 'bold 8px Arial';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText('SELECTED', station.x - camera.x + station.width / 2, station.y - camera.y + station.height - 4);
+                } else if (isLocked) {
+                    ctx.fillStyle = '#553333';
+                    ctx.font = 'bold 8px Arial';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText('LOCKED', station.x - camera.x + station.width / 2, station.y - camera.y + station.height - 4);
+                }
+            }
+
+            // WARDROBE — skin cosmetics (bottom-left)
+            if (wardrobeStations.length > 0) {
+                ctx.fillStyle = '#c890cc';
+                ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('WARDROBE', wardrobeStations[0].x - camera.x, wardrobeStations[0].y - camera.y - 4);
+            }
+            for (let station of wardrobeStations) {
+                const def = skinDefs[station.id];
+                const isEquipped = equippedSkinId === station.id;
+                const isOwned = unlockedSkins.includes(station.id);
+                const sx = station.x - camera.x;
+                const sy = station.y - camera.y;
+
+                // Card background — use skin body color as subtle tint
+                ctx.fillStyle = isEquipped ? 'rgba(60,30,70,0.95)' : (isOwned ? 'rgba(35,22,40,0.88)' : 'rgba(22,16,28,0.85)');
+                ctx.fillRect(sx, sy, station.width, station.height);
+                ctx.strokeStyle = isEquipped ? '#cc88ff' : (isOwned ? '#8855aa' : '#443344');
+                ctx.lineWidth = isEquipped ? 2.5 : 1.5;
+                ctx.strokeRect(sx, sy, station.width, station.height);
+
+                // Mini mouse preview circle (colored with skin)
+                ctx.fillStyle = def.body;
+                ctx.beginPath(); ctx.arc(sx + 14, sy + station.height / 2, 7, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = def.bodyStroke; ctx.lineWidth = 1; ctx.stroke();
+                // Ear
+                ctx.fillStyle = def.ear;
+                ctx.beginPath(); ctx.arc(sx + 10, sy + station.height / 2 - 8, 3.5, 0, Math.PI * 2); ctx.fill();
+
+                // Skin name
+                ctx.fillStyle = isEquipped ? '#cc88ff' : (isOwned ? '#ddbbee' : '#aaaaaa');
+                ctx.font = 'bold 9px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(def.name, sx + 26, sy + 6);
+
+                // Cost or status
+                ctx.font = '8px Arial';
+                ctx.textBaseline = 'bottom';
+                if (isEquipped) {
+                    ctx.fillStyle = '#cc88ff';
+                    ctx.fillText('WEARING', sx + 26, sy + station.height - 4);
+                } else if (isOwned) {
+                    ctx.fillStyle = '#99aacc';
+                    ctx.fillText('OWNED', sx + 26, sy + station.height - 4);
+                } else {
+                    ctx.fillStyle = '#ffee88';
+                    ctx.fillText(`${def.cost} crumbs`, sx + 26, sy + station.height - 4);
+                }
             }
 
             if (!baseDoorOpen) {
@@ -2596,10 +3047,14 @@
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
             const station = getNearbyWeaponStation(playerCenterX, playerCenterY);
-            const upgradeStation = getNearbyUpgradeStation(playerCenterX, playerCenterY);
+            const gStation = getNearbyGrenadeStation(playerCenterX, playerCenterY);
+            const modStation = getNearbyModStation(playerCenterX, playerCenterY);
+            const skillStation = getNearbySkillStation(playerCenterX, playerCenterY);
+            const levelStation = getNearbyLevelStation(playerCenterX, playerCenterY);
             const nearDoor = !baseDoorOpen && isPlayerNearDoor(playerCenterX, playerCenterY);
+            const wardrobeStation = getNearbyWardrobeStation(playerCenterX, playerCenterY);
 
-            if (!station && !nearDoor && !upgradeStation) {
+            if (!station && !nearDoor && !gStation && !modStation && !skillStation && !levelStation && !wardrobeStation) {
                 return;
             }
 
@@ -2610,32 +3065,76 @@
                 } else {
                     const unlockCost = getWeaponUnlockCost(station.id);
                     if (money >= unlockCost) {
-                        prompt = `Press E to unlock ${weaponConfigs[station.id].name} ($${unlockCost})`;
+                        prompt = `Press E to unlock ${weaponConfigs[station.id].name} (${unlockCost} crumbs)`;
                     } else {
-                        prompt = `${weaponConfigs[station.id].name} unlock: $${unlockCost} (You have $${money})`;
+                        prompt = `${weaponConfigs[station.id].name} unlock: ${unlockCost} crumbs (You have ${money})`;
                     }
                 }
-            } else if (upgradeStation) {
-                const cost = getUpgradeCost(upgradeStation.type);
-                const labels = {
-                    damage: 'Damage',
-                    moveSpeed: 'Move Speed',
-                    fireSpeed: 'Fire Rate',
-                    reloadSpeed: 'Reload Speed',
-                    maxHealth: 'Max Health',
-                    pickupRange: 'Pickup Range'
-                };
-                if (money >= cost) {
-                    prompt = `Press E to upgrade ${labels[upgradeStation.type]} ($${cost})`;
+            } else if (gStation) {
+                const gName = grenadeTypes[gStation.type] ? grenadeTypes[gStation.type].name : gStation.type;
+                const effMax = getEffectiveGrenadeMax();
+                if (grenadeCount >= effMax) {
+                    prompt = `Grenade slots full (${grenadeCount}/${effMax})`;
+                } else if (money >= grenadeBaseCost) {
+                    prompt = `Press E to buy ${gName} Grenade (${grenadeBaseCost} crumbs) — have ${grenadeCount}/${effMax}`;
                 } else {
-                    prompt = `${labels[upgradeStation.type]} upgrade: $${cost} (You have $${money})`;
+                    prompt = `${gName} Grenade: ${grenadeBaseCost} crumbs (You have ${money})`;
+                }
+            } else if (modStation) {
+                const def = weaponModDefs[modStation.id];
+                const onMain = equippedMods.main.includes(modStation.id);
+                const onSide = equippedMods.sidearm.includes(modStation.id);
+                if (!onMain && !onSide) {
+                    if (money >= def.cost) {
+                        prompt = `Press E to buy ${def.name} mod (${def.cost} crumbs) → equips to MAIN`;
+                    } else {
+                        prompt = `${def.name}: ${def.cost} crumbs (You have ${money})`;
+                    }
+                } else if (onMain) {
+                    prompt = `Press E to move ${def.name} from MAIN → SIDEARM`;
+                } else {
+                    prompt = `Press E to unequip ${def.name} from SIDEARM`;
+                }
+            } else if (skillStation) {
+                const def = skillStation.type === 'passive' ? passiveSkillDefs[skillStation.id] : activeSkillDefs[skillStation.id];
+                const arr = skillStation.type === 'passive' ? learnedSkills.passive : learnedSkills.active;
+                if (arr.includes(skillStation.id)) {
+                    prompt = `${def.name} already learned`;
+                } else if (money >= def.cost) {
+                    prompt = `Press E to learn ${def.name} (${def.cost} crumbs) — ${def.desc}`;
+                } else {
+                    prompt = `${def.name}: ${def.cost} crumbs (You have ${money})`;
+                }
+            } else if (levelStation) {
+                if (!levelStation.unlocked) {
+                    const prevLevel = levelStation.id - 1;
+                    const prevNames = { 1: 'The House', 2: 'Basement', 3: 'Attic' };
+                    prompt = `${levelStation.name} locked — extract from ${prevNames[prevLevel] || 'previous level'} to unlock`;
+                } else if (currentLevel === levelStation.id) {
+                    prompt = `${levelStation.name} already selected`;
+                } else {
+                    prompt = `Press E to select ${levelStation.name}`;
+                }
+            } else if (wardrobeStation) {
+                const def = skinDefs[wardrobeStation.id];
+                const isOwned = unlockedSkins.includes(wardrobeStation.id);
+                const isEquipped = equippedSkinId === wardrobeStation.id;
+                if (isEquipped) {
+                    prompt = `${def.name} skin is equipped`;
+                } else if (isOwned) {
+                    prompt = `Press E to wear the ${def.name} skin`;
+                } else if (money >= def.cost) {
+                    prompt = `Press E to buy ${def.name} skin (${def.cost} crumbs)`;
+                } else {
+                    prompt = `${def.name} skin: ${def.cost} crumbs (You have ${money})`;
                 }
             } else if (nearDoor) {
-                prompt = 'Press E to open the door and start the run';
+                const lvlName = (levelDefs.find(l => l.id === currentLevel) || {}).name || 'Level ' + currentLevel;
+                prompt = `Press E to enter the burrow — ${lvlName}`;
             }
 
             ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.fillRect(canvas.width / 2 - 220, canvas.height - 90, 440, 32);
+            ctx.fillRect(canvas.width / 2 - 260, canvas.height - 90, 520, 32);
             ctx.fillStyle = '#ffffff';
             ctx.font = '16px Arial';
             ctx.textAlign = 'center';
@@ -2760,6 +3259,58 @@
             return null;
         }
 
+        function getNearbyGrenadeStation(playerCenterX, playerCenterY) {
+            const interactRange = 80;
+            for (let station of grenadeStations) {
+                const cx = station.x + station.width / 2;
+                const cy = station.y + station.height / 2;
+                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) {
+                    return station;
+                }
+            }
+            return null;
+        }
+
+        function getNearbyModStation(playerCenterX, playerCenterY) {
+            const interactRange = 80;
+            for (let station of modStations) {
+                const cx = station.x + station.width / 2;
+                const cy = station.y + station.height / 2;
+                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) return station;
+            }
+            return null;
+        }
+
+        function getNearbySkillStation(playerCenterX, playerCenterY) {
+            const interactRange = 80;
+            for (let station of skillStations) {
+                const cx = station.x + station.width / 2;
+                const cy = station.y + station.height / 2;
+                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) return station;
+            }
+            return null;
+        }
+
+        function getNearbyLevelStation(playerCenterX, playerCenterY) {
+            const interactRange = 80;
+            for (let station of levelStations) {
+                const cx = station.x + station.width / 2;
+                const cy = station.y + station.height / 2;
+                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) return station;
+            }
+            return null;
+        }
+
+        function getNearbyWardrobeStation(playerCenterX, playerCenterY) {
+            const interactRange = 80;
+            for (let station of wardrobeStations) {
+                const cx = station.x + station.width / 2;
+                const cy = station.y + station.height / 2;
+                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) return station;
+            }
+            return null;
+        }
+
         function handleBaseInteract() {
             if (gameState !== 'base') {
                 return false;
@@ -2769,7 +3320,12 @@
             const station = getNearbyWeaponStation(playerCenterX, playerCenterY);
             if (station) {
                 if (isWeaponUnlocked(station.id)) {
-                    selectedWeaponId = station.id;
+                    // Assign to correct slot based on category
+                    if (weaponConfigs[station.id].category === 'sidearm') {
+                        sidearmId = station.id;
+                    } else {
+                        selectedWeaponId = station.id;
+                    }
                     applySelectedWeapon(true);
                     return true;
                 }
@@ -2777,8 +3333,13 @@
                 const unlockCost = getWeaponUnlockCost(station.id);
                 if (money >= unlockCost) {
                     money -= unlockCost;
+                    saveBankedCrumbs();
                     unlockWeapon(station.id);
-                    selectedWeaponId = station.id;
+                    if (weaponConfigs[station.id].category === 'sidearm') {
+                        sidearmId = station.id;
+                    } else {
+                        selectedWeaponId = station.id;
+                    }
                     applySelectedWeapon(true);
                     playSound(850, 0.1, 'sine');
                     return true;
@@ -2787,21 +3348,109 @@
                 playSound(150, 0.08, 'square');
                 return false;
             }
-            const upgradeStation = getNearbyUpgradeStation(playerCenterX, playerCenterY);
-            if (upgradeStation) {
-                const cost = getUpgradeCost(upgradeStation.type);
-                if (money >= cost) {
-                    money -= cost;
-                    upgrades[upgradeStation.type].level++;
-                    applySelectedWeapon(false);
+
+            // Grenade station interaction
+            const gStation = getNearbyGrenadeStation(playerCenterX, playerCenterY);
+            if (gStation) {
+                const effMax = getEffectiveGrenadeMax();
+                if (money >= grenadeBaseCost && grenadeCount < effMax) {
+                    money -= grenadeBaseCost;
+                    saveBankedCrumbs();
+                    equippedGrenadeType = gStation.type;
+                    grenadeCount = Math.min(grenadeCount + 1, effMax);
                     playSound(800, 0.1, 'sine');
                     return true;
-                } else {
+                }
+                playSound(150, 0.08, 'square');
+                return false;
+            }
+            // Mod station interaction: not equipped → buy+equip main → move to sidearm → unequip
+            const modStation = getNearbyModStation(playerCenterX, playerCenterY);
+            if (modStation) {
+                const def = weaponModDefs[modStation.id];
+                const onMain = equippedMods.main.includes(modStation.id);
+                const onSide = equippedMods.sidearm.includes(modStation.id);
+                if (!onMain && !onSide) {
+                    if (money >= def.cost) {
+                        money -= def.cost;
+                        saveBankedCrumbs();
+                        equippedMods.main.push(modStation.id);
+                        playSound(850, 0.1, 'sine');
+                        return true;
+                    }
                     playSound(150, 0.08, 'square');
+                    return false;
+                } else if (onMain) {
+                    equippedMods.main = equippedMods.main.filter(id => id !== modStation.id);
+                    equippedMods.sidearm.push(modStation.id);
+                    playSound(700, 0.08, 'sine');
+                    return true;
+                } else {
+                    equippedMods.sidearm = equippedMods.sidearm.filter(id => id !== modStation.id);
+                    playSound(400, 0.08, 'square');
+                    return true;
                 }
             }
+
+            // Skill station interaction: buy skill permanently
+            const skillStation = getNearbySkillStation(playerCenterX, playerCenterY);
+            if (skillStation) {
+                const def = skillStation.type === 'passive' ? passiveSkillDefs[skillStation.id] : activeSkillDefs[skillStation.id];
+                const arr = skillStation.type === 'passive' ? learnedSkills.passive : learnedSkills.active;
+                if (arr.includes(skillStation.id)) {
+                    playSound(400, 0.05, 'sine');
+                    return false;
+                }
+                if (money >= def.cost) {
+                    money -= def.cost;
+                    saveBankedCrumbs();
+                    arr.push(skillStation.id);
+                    playSound(950, 0.12, 'sine');
+                    return true;
+                }
+                playSound(150, 0.08, 'square');
+                return false;
+            }
+
+            // Level station interaction: select level
+            const levelStation = getNearbyLevelStation(playerCenterX, playerCenterY);
+            if (levelStation) {
+                if (levelStation.unlocked) {
+                    currentLevel = levelStation.id;
+                    playSound(600, 0.08, 'sine');
+                    return true;
+                }
+                playSound(150, 0.08, 'square');
+                return false;
+            }
+
+            // Wardrobe station interaction: buy or equip skin
+            const wardrobeStation = getNearbyWardrobeStation(playerCenterX, playerCenterY);
+            if (wardrobeStation) {
+                const def = skinDefs[wardrobeStation.id];
+                const isOwned = unlockedSkins.includes(wardrobeStation.id);
+                if (isOwned) {
+                    equippedSkinId = wardrobeStation.id;
+                    localStorage.setItem('mh_equippedSkin', equippedSkinId);
+                    playSound(780, 0.1, 'sine');
+                    return true;
+                }
+                if (money >= def.cost) {
+                    money -= def.cost;
+                    saveBankedCrumbs();
+                    unlockedSkins.push(wardrobeStation.id);
+                    localStorage.setItem('mh_unlockedSkins', JSON.stringify(unlockedSkins));
+                    equippedSkinId = wardrobeStation.id;
+                    localStorage.setItem('mh_equippedSkin', equippedSkinId);
+                    playSound(950, 0.12, 'sine');
+                    return true;
+                }
+                playSound(150, 0.08, 'square');
+                return false;
+            }
+
             if (!baseDoorOpen && isPlayerNearDoor(playerCenterX, playerCenterY)) {
-                window.location.href = `game.html?${buildGameStateQuery()}&v=20260218d`;
+                window.location.href = `game.html?${buildGameStateQuery()}&v=20260315b`;
                 return true;
             }
             return false;
@@ -3042,39 +3691,59 @@
 
         // Draw background
         function drawBackground() {
-            ctx.fillStyle = '#1a1a1a';
+            // Warm house interior — off-white walls
+            ctx.fillStyle = '#f5f0e8';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw map grid pattern
-            ctx.strokeStyle = '#333';
+            // Wood floor (full base area)
+            ctx.fillStyle = '#d4a96a';
+            ctx.fillRect(-camera.x, -camera.y, mapWidth, mapHeight);
+
+            // Wood grain lines
+            ctx.save();
+            ctx.strokeStyle = '#c09050';
             ctx.lineWidth = 1;
-            const gridSize = 100;
-
-            for (let x = -camera.x % gridSize; x < canvas.width; x += gridSize) {
+            ctx.globalAlpha = 0.35;
+            const grainSpacing = 18;
+            for (let y = (-camera.y) % grainSpacing; y < canvas.height + grainSpacing; y += grainSpacing) {
+                const worldY = y + camera.y;
                 ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
+                ctx.moveTo(0, y + Math.sin(worldY * 0.03) * 1.5);
+                ctx.lineTo(canvas.width, y + Math.sin((worldY + canvas.width) * 0.03) * 1.5);
                 ctx.stroke();
             }
-
-            for (let y = -camera.y % gridSize; y < canvas.height; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(canvas.width, y);
-                ctx.stroke();
-            }
+            ctx.restore();
         }
 
-        // Draw obstacles
+        // Draw obstacles — household furniture with hand-drawn style
         function drawObstacles() {
-            ctx.fillStyle = '#555';
             for (let obstacle of obstacles) {
-                ctx.fillRect(
-                    obstacle.x - camera.x,
-                    obstacle.y - camera.y,
-                    obstacle.width,
-                    obstacle.height
-                );
+                const ox = obstacle.x - camera.x;
+                const oy = obstacle.y - camera.y;
+                const ow = obstacle.width;
+                const oh = obstacle.height;
+                // Shadow
+                ctx.save();
+                ctx.globalAlpha = 0.18;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(ox + 4, oy + 4, ow, oh);
+                ctx.restore();
+                // Fill
+                ctx.fillStyle = '#8b6340';
+                ctx.fillRect(ox, oy, ow, oh);
+                // Wobbly border
+                ctx.save();
+                ctx.strokeStyle = '#5c3d1a';
+                ctx.lineWidth = 2.5;
+                const w = 2;
+                ctx.beginPath();
+                ctx.moveTo(ox + w * Math.sin(0), oy + w * Math.cos(0));
+                ctx.lineTo(ox + ow + w * Math.sin(1), oy + w * Math.cos(1));
+                ctx.lineTo(ox + ow + w * Math.sin(2), oy + oh + w * Math.cos(2));
+                ctx.lineTo(ox + w * Math.sin(3), oy + oh + w * Math.cos(3));
+                ctx.closePath();
+                ctx.stroke();
+                ctx.restore();
             }
         }
 
