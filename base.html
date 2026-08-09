@@ -276,7 +276,12 @@
         };
         const skinIds = Object.keys(skinDefs);
         let equippedSkinId = localStorage.getItem('mh_equippedSkin') || 'default';
-        let unlockedSkins = JSON.parse(localStorage.getItem('mh_unlockedSkins') || '["default"]');
+        let unlockedSkins;
+        try {
+            unlockedSkins = JSON.parse(localStorage.getItem('mh_unlockedSkins') || '["default"]');
+        } catch (e) {
+            unlockedSkins = ['default'];
+        }
         if (!unlockedSkins.includes('default')) unlockedSkins.push('default');
         const wardrobeStations = [];
 
@@ -685,7 +690,11 @@
         let difficultyProgress = 0; // 0 to 100 for current level
         let difficultyIncreaseRate = 0.02261; // Per frame (1.33x faster)
         let spawnTimer = 0;
-        let money = parseInt(localStorage.getItem('mh_bankedCrumbs') || '0', 10);
+        function loadBankedCrumbs() {
+            const stored = Number.parseInt(localStorage.getItem('mh_bankedCrumbs') || '0', 10);
+            return Number.isFinite(stored) ? Math.max(0, stored) : 0;
+        }
+        let money = loadBankedCrumbs();
         function saveBankedCrumbs() { localStorage.setItem('mh_bankedCrumbs', String(Math.max(0, Math.floor(money)))); }
         let enemiesKilled = 0;
         let runEnemiesKilled = 0;
@@ -720,10 +729,27 @@
             unlockedWeapons.flamethrower = false;
             unlockedWeapons.acidShooter = false;
             unlockedWeapons.crossbow = false;
+            unlockedWeapons.burstRifle = false;
+            unlockedWeapons.sawedOffShotgun = false;
         }
 
         function isWeaponUnlocked(weaponId) {
             return !!unlockedWeapons[weaponId];
+        }
+
+        // Crafted weapons are saved here so they're still unlocked next time,
+        // even if the player opens base.html without coming from a run.
+        function loadUnlockedWeaponsFromStorage() {
+            try {
+                return JSON.parse(localStorage.getItem('mh_unlockedWeapons') || '["handgun"]');
+            } catch (e) {
+                return ['handgun'];
+            }
+        }
+
+        function saveUnlockedWeaponsToStorage() {
+            const unlocked = baseWeaponIds.filter(id => isWeaponUnlocked(id));
+            localStorage.setItem('mh_unlockedWeapons', JSON.stringify(unlocked));
         }
 
         function unlockWeapon(weaponId) {
@@ -731,22 +757,23 @@
                 return;
             }
             unlockedWeapons[weaponId] = true;
+            saveUnlockedWeaponsToStorage();
         }
 
         function loadUnlockedWeaponsFromQuery(params) {
             resetWeaponUnlocks();
             const unlockedCsv = (params.get('unlocked') || '').trim();
-            if (!unlockedCsv) {
-                return;
-            }
+            const queryIds = unlockedCsv ? unlockedCsv.split(',').map(id => id.trim()).filter(Boolean) : [];
+            const storedIds = loadUnlockedWeaponsFromStorage();
+            const ids = new Set([...queryIds, ...storedIds]);
 
-            const ids = unlockedCsv.split(',').map(id => id.trim()).filter(Boolean);
             for (let id of ids) {
                 if (weaponConfigs[id]) {
-                    unlockWeapon(id);
+                    unlockedWeapons[id] = true;
                 }
             }
             unlockedWeapons.handgun = true;
+            saveUnlockedWeaponsToStorage();
         }
 
         function buildUnlockedWeaponsParam() {
@@ -779,7 +806,7 @@
             }
 
             // Banked crumbs live in localStorage — never loaded from URL
-            money = parseInt(localStorage.getItem('mh_bankedCrumbs') || '0', 10);
+            money = loadBankedCrumbs();
 
             // Load grenade loadout
             const queryGrenadeType = params.get('grenadeType');
@@ -1736,6 +1763,24 @@
             gain.connect(audioContext.destination);
             osc.start(now);
             osc.stop(now + 0.12);
+        }
+
+        // Simple UI beep used for buying/equipping/upgrading at base stations.
+        function playSound(frequency, duration, waveType) {
+            if (!audioContext) return;
+            const now = audioContext.currentTime;
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+            const osc = audioContext.createOscillator();
+            osc.type = waveType;
+            osc.frequency.setValueAtTime(frequency, now);
+
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            osc.start(now);
+            osc.stop(now + duration);
         }
 
         function createHitEffect(x, y, color) {
@@ -3270,15 +3315,21 @@
 
         // Shared by every "is player standing next to X" check in the base —
         // weapon racks, grenade box, mod bench, skill board, level doors, wardrobe.
+        // Picks the closest station in range, not just the first one found —
+        // rows of stations sit close enough together that their ranges overlap.
         function findNearbyStation(stations, playerCenterX, playerCenterY, range = stationInteractRange) {
+            let closest = null;
+            let closestDist = Infinity;
             for (let station of stations) {
                 const centerX = station.x + station.width / 2;
                 const centerY = station.y + station.height / 2;
-                if (Math.hypot(playerCenterX - centerX, playerCenterY - centerY) <= range) {
-                    return station;
+                const dist = Math.hypot(playerCenterX - centerX, playerCenterY - centerY);
+                if (dist <= range && dist < closestDist) {
+                    closest = station;
+                    closestDist = dist;
                 }
             }
-            return null;
+            return closest;
         }
 
         function handleBaseInteract() {
@@ -3527,9 +3578,11 @@
         };
 
         function loadMaterials() {
+            const scraps = Number.parseInt(localStorage.getItem('mh_scraps') || '0', 10);
+            const parts  = Number.parseInt(localStorage.getItem('mh_parts')  || '0', 10);
             return {
-                scraps: parseInt(localStorage.getItem('mh_scraps') || '0', 10),
-                parts:  parseInt(localStorage.getItem('mh_parts')  || '0', 10)
+                scraps: Number.isFinite(scraps) ? scraps : 0,
+                parts:  Number.isFinite(parts)  ? parts  : 0
             };
         }
         function saveMaterials(m) {

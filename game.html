@@ -1275,9 +1275,14 @@
             }
         }
 
+        function loadBankedCrumbs() {
+            const stored = Number.parseInt(localStorage.getItem('mh_bankedCrumbs') || '0', 10);
+            return Number.isFinite(stored) ? Math.max(0, stored) : 0;
+        }
+
         function extractPlayer() {
             // Bank run crumbs into localStorage — safe from future deaths
-            const prevBanked = parseInt(localStorage.getItem('mh_bankedCrumbs') || '0', 10);
+            const prevBanked = loadBankedCrumbs();
             localStorage.setItem('mh_bankedCrumbs', String(prevBanked + Math.floor(runMoneyEarned)));
             recordRunToJournal(true);
             // Unlock the next level on first successful extraction from this one
@@ -3351,7 +3356,7 @@
             
             // Keep 10% of run crumbs on death, same as extraction banks 100%
             const keptAmount = Math.floor(runMoneyEarned * 0.1);
-            const prevBanked = parseInt(localStorage.getItem('mh_bankedCrumbs') || '0', 10);
+            const prevBanked = loadBankedCrumbs();
             localStorage.setItem('mh_bankedCrumbs', String(prevBanked + keptAmount));
             deathMoneyPenalty = Math.floor(money) - keptAmount;
             money = 0;

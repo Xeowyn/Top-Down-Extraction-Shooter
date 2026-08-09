@@ -1,0 +1,25 @@
+{
+  "name": "top-down-extraction-shooter",
+  "version": "1.0.0",
+  "description": "A top-down extraction shooter built with vanilla HTML5 Canvas and JavaScript — no engine, no build step. You play as a mouse scavenging dangerous household environments for loot, fighting off roaches and rival rodents, and escaping through mouse holes before you die.",
+  "main": "db.js",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xeowyn/Top-Down-Extraction-Shooter.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Xeowyn/Top-Down-Extraction-Shooter/issues"
+  },
+  "homepage": "https://github.com/Xeowyn/Top-Down-Extraction-Shooter#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "playwright": "^1.62.1"
+  }
+}
