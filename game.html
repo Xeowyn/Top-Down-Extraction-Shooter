@@ -3338,6 +3338,9 @@
             return amount;
         }
 
+        // How much of a run's earned crumbs you keep when you die (extraction keeps 100%)
+        const DEATH_KEEP_PERCENT = 0.1;
+
         function triggerPlayerDeath() {
             for (let i = 0; i < 30; i++) {
                 const angle = Math.random() * Math.PI * 2;
@@ -3354,8 +3357,8 @@
                 });
             }
             
-            // Keep 10% of run crumbs on death, same as extraction banks 100%
-            const keptAmount = Math.floor(runMoneyEarned * 0.1);
+            // Keep a share of run crumbs on death, same as extraction banks 100%
+            const keptAmount = Math.floor(runMoneyEarned * DEATH_KEEP_PERCENT);
             const prevBanked = loadBankedCrumbs();
             localStorage.setItem('mh_bankedCrumbs', String(prevBanked + keptAmount));
             deathMoneyPenalty = Math.floor(money) - keptAmount;
@@ -5982,7 +5985,7 @@
                 // Death penalty message
                 ctx.fillStyle = '#ff4444';
                 ctx.font = 'bold 28px Arial';
-                ctx.fillText(`⚠ MONEY LOST: -$${deathMoneyPenalty} (kept 10%)`, canvas.width / 2, canvas.height / 2 + 130);
+                ctx.fillText(`⚠ MONEY LOST: -$${deathMoneyPenalty} (kept ${Math.round(DEATH_KEEP_PERCENT * 100)}%)`, canvas.width / 2, canvas.height / 2 + 130);
                 
                 ctx.globalAlpha = 1;
             }

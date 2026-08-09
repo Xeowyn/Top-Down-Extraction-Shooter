@@ -2843,9 +2843,9 @@
                         ctx.fillText(hasBp ? (canCraft ? `⚒ ${cost.scraps}sc ${cost.parts}pt` : `${cost.scraps}sc ${cost.parts}pt`) : 'Find blueprint', station.x - camera.x + station.width / 2, station.y - camera.y + station.height);
                     } else {
                         const upgCost = weaponUpgradeCost[station.id];
-                        const canUpg = lvl < 5 && _m.scraps >= upgCost.scraps && _m.parts >= upgCost.parts;
+                        const canUpg = lvl < MAX_WEAPON_LEVEL && _m.scraps >= upgCost.scraps && _m.parts >= upgCost.parts;
                         ctx.fillStyle = canUpg ? '#88cc44' : '#554433';
-                        ctx.fillText(lvl < 5 ? `▲ ${upgCost.scraps}sc ${upgCost.parts}pt` : 'MAX', station.x - camera.x + station.width / 2, station.y - camera.y + station.height);
+                        ctx.fillText(lvl < MAX_WEAPON_LEVEL ? `▲ ${upgCost.scraps}sc ${upgCost.parts}pt` : 'MAX', station.x - camera.x + station.width / 2, station.y - camera.y + station.height);
                     }
                 }
             }
@@ -3122,7 +3122,7 @@
                     const lvl = wl[station.id] || 0;
                     const upgCost = weaponUpgradeCost[station.id];
                     const m = loadMaterials();
-                    if (lvl < 5 && m.scraps >= upgCost.scraps && m.parts >= upgCost.parts) {
+                    if (lvl < MAX_WEAPON_LEVEL && m.scraps >= upgCost.scraps && m.parts >= upgCost.parts) {
                         prompt = `Press E to upgrade ${weaponConfigs[station.id].name} Lv${lvl}→Lv${lvl+1} (${upgCost.scraps} scraps, ${upgCost.parts} parts)`;
                     } else {
                         prompt = `Press E to take ${weaponConfigs[station.id].name}${lvl > 0 ? ' Lv'+lvl : ''}`;
@@ -3346,7 +3346,7 @@
                     const lvl = wl[station.id] || 0;
                     const upgCost = weaponUpgradeCost[station.id];
                     const m = loadMaterials();
-                    if (lvl < 5 && m.scraps >= upgCost.scraps && m.parts >= upgCost.parts) {
+                    if (lvl < MAX_WEAPON_LEVEL && m.scraps >= upgCost.scraps && m.parts >= upgCost.parts) {
                         m.scraps -= upgCost.scraps;
                         m.parts  -= upgCost.parts;
                         saveMaterials(m);
@@ -3576,6 +3576,8 @@
             burstRifle:     { scraps: 22, parts: 3 },
             sawedOffShotgun:{ scraps: 14, parts: 1 }
         };
+
+        const MAX_WEAPON_LEVEL = 5;
 
         function loadMaterials() {
             const scraps = Number.parseInt(localStorage.getItem('mh_scraps') || '0', 10);
