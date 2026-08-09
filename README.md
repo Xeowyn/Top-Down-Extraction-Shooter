@@ -2,8 +2,6 @@
 
 A game where you play as a mouse. You sneak into a house, grab loot, fight off bugs and other mice, and then escape before you get killed. It's made with plain HTML, CSS, and JavaScript — no game engine, nothing to install or build.
 
-Check out [`GAME_PLAN.md`](GAME_PLAN.md) to see the full design: all the levels, enemies, weapons, and what's planned next.
-
 ## How to run it
 
 You don't need to install anything.
@@ -22,6 +20,8 @@ python3 -m http.server 8000
 ```
 
 Then open `http://localhost:8000` in your browser.
+
+Check out [`GAME_PLAN.md`](GAME_PLAN.md) to see the full design: all the levels, enemies, weapons, and what's planned next.
 
 ## Controls
 
