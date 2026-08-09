@@ -280,13 +280,11 @@
         if (!unlockedSkins.includes('default')) unlockedSkins.push('default');
         const wardrobeStations = [];
 
-        // Camera object
         const camera = {
             x: 0,
             y: 0
         };
 
-        // Player object
         const player = {
             x: mapWidth / 2,
             y: mapHeight / 2,
@@ -324,7 +322,6 @@
             meleeDirY: 0
         };
 
-        // Obstacles array
         const obstacles = [];
 
         const baseWalls = [];
@@ -521,7 +518,6 @@
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        // Bullets array
         const bullets = [];
         const bulletTrailMin = 6;
         const bulletTrailMax = 14;
@@ -632,7 +628,6 @@
             sawedOffShotgun: false
         };
 
-        // Enemy bullets array
         const enemyBullets = [];
         const enemyBulletSpeed = 9;
         const enemyBulletSize = 4;
@@ -662,10 +657,8 @@
         // Particles array for explosions
         const particles = [];
 
-        // Enemies array
         const enemies = [];
 
-        // Coins array
         const coins = [];
 
         // Noise system
@@ -1487,7 +1480,6 @@
             }
         }
 
-        // Update bullets
         function updateBullets() {
             for (let i = bullets.length - 1; i >= 0; i--) {
                 bullets[i].x += bullets[i].velocityX;
@@ -1524,7 +1516,6 @@
             }
         }
 
-        // Update enemy bullets
         function updateEnemyBullets() {
             for (let i = enemyBullets.length - 1; i >= 0; i--) {
                 const bullet = enemyBullets[i];
@@ -1596,7 +1587,6 @@
             }
         }
 
-        // Create explosion effect
         function createExplosion(x, y) {
             const particleCount = 8;
             for (let i = 0; i < particleCount; i++) {
@@ -1615,7 +1605,6 @@
             }
         }
 
-        // Update particles
         function updateParticles() {
             for (let i = particles.length - 1; i >= 0; i--) {
                 particles[i].x += particles[i].velocityX;
@@ -2017,7 +2006,7 @@
                     const normalX = -edgeDy;
                     const normalY = edgeDx;
                     
-                    // Check if edge faces away from player (dot product)
+                    // Check if this edge faces away from the player
                     const dotProduct = dx * normalX + dy * normalY;
                     
                     if (dotProduct > 0) {
@@ -2411,7 +2400,7 @@
                     moveEntityWithCollisions(enemy, moveX, moveY);
                 }
 
-                // Re-evaluate LOS after movement for cover decisions
+                // Check sightline again after moving, to decide about cover
                 const movedCenterX = enemy.x + enemy.width / 2;
                 const movedCenterY = enemy.y + enemy.height / 2;
                 const movedHasLOS = hasLineOfSight(movedCenterX, movedCenterY, targetX, targetY);
@@ -2505,7 +2494,6 @@
             }
         }
 
-        // Update difficulty
         function updateDifficulty() {
             if (difficulty < maxDifficulty) {
                 difficultyProgress += difficultyIncreaseRate;
@@ -2522,7 +2510,6 @@
             }
         }
 
-        // Update coins
         function updateCoins() {
             const pickupRadius = player.pickupRange || 40;
             
@@ -2550,7 +2537,6 @@
             }
         }
 
-        // Draw player
         function drawMouseCharacter(cx, cy, angle, hitFlash, alpha, skin) {
             const s = skin || skinDefs[equippedSkinId] || skinDefs.default;
             ctx.save();
@@ -2653,7 +2639,6 @@
             }
         }
 
-        // Draw bullets
         function drawBullets() {
             for (let bullet of bullets) {
                 drawBulletTrail(bullet);
@@ -2670,7 +2655,6 @@
             }
         }
 
-        // Draw enemy bullets
         function drawEnemyBullets() {
             for (let bullet of enemyBullets) {
                 drawBulletTrail(bullet);
@@ -2687,7 +2671,6 @@
             }
         }
 
-        // Draw particles
         function drawParticles() {
             for (let particle of particles) {
                 ctx.fillStyle = particle.color;
@@ -2705,7 +2688,6 @@
             }
         }
 
-        // Draw enemies
         function drawEnemies() {
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
@@ -2745,7 +2727,6 @@
             }
         }
 
-        // Draw coins
         function drawCoins() {
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
@@ -3216,7 +3197,6 @@
             ctx.fillText(`Level ${difficulty} - ${Math.floor(difficultyProgress)}%`, canvas.width / 2, barY + barHeight / 2);
         }
 
-        // Draw money counter
         function drawMoneyCounter() {
             ctx.fillStyle = '#ffcc00';
             ctx.font = 'bold 20px Arial';
@@ -3240,7 +3220,6 @@
             ctx.fillText(`⚙ ${_m.scraps} scraps  ${_m.parts} parts`, 20, 46);
         }
 
-        // Draw health bar
         function drawHealthBar() {
             const barWidth = 200;
             const barHeight = 20;
@@ -3928,7 +3907,6 @@
             ctx.fillText('Press Space or click Play to enter the base', canvas.width / 2, canvas.height - 100);
         }
 
-        // Update death screen
         function updateDeathScreen() {
             deathTimer++;
             
@@ -3947,7 +3925,6 @@
             }
         }
 
-        // Draw death screen
         function drawDeathScreen() {
             // Slow motion effect on particles
             const slowMoFactor = 0.3;
@@ -4040,7 +4017,6 @@
             }
         }
 
-        // Draw pause overlay
         function drawPauseOverlay() {
             // Semi-transparent overlay
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -4116,7 +4092,6 @@
             }
         }
 
-        // Game loop
         function gameLoop() {
             if (gameState === 'hub') {
                 drawHubScreen();

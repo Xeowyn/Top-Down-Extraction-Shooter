@@ -1,195 +1,195 @@
 # Top-Down Extraction Shooter — Game Plan
 
-> Living design document. Update this as the vision evolves.
-> Tech stack: Vanilla HTML5 Canvas / JavaScript — no engine required.
+> This is the design doc. Update it whenever the plan changes.
+> Built with: plain HTML5 Canvas and JavaScript — no game engine.
 
 ---
 
-## Vision
+## The Big Idea
 
-An easy-to-get-into, hard-to-master extraction shooter. You play as a **mouse** navigating dangerous household environments, scrounging for materials and money, fighting off roaches and rival rodents, and escaping safely through **mouse holes in the walls**.
+An extraction shooter that's easy to pick up but hard to master. You play as a **mouse** sneaking through a house, grabbing money and materials, fighting off roaches and rival rodents, and getting out safely through **mouse holes in the walls**.
 
-The tone is **charming and fun** — hand-drawn art style, colorful, exciting, lots going on — not grim or gory. Rewarding to grind, fun to master.
+The vibe is **fun and charming**, not scary or gross — hand-drawn art, bright colors, lots of action. It should feel good to grind and satisfying to get better at.
 
 ---
 
 ## Art Style
 
-- **Hand-drawn, charming aesthetic** — thick outlines, warm colors, slightly wobbly shapes
-- Not violent-looking — enemies ragdoll/poof away, no blood
-- Colorful per-level palette
-- Player: small brown mouse with ears, backpack, holding weapons
-- Enemies: cockroaches, rival mice, rats — each with distinct silhouettes
-- UI: sketch/notebook paper feel
-- Sprites to be sourced or created — search itch.io, OpenGameArt, or hand-draw in a pixel/vector tool
+- **Hand-drawn and charming** — thick outlines, warm colors, slightly wobbly shapes
+- Not violent — enemies poof away or ragdoll, no blood
+- Each level has its own colorful look
+- Player: a small brown mouse with ears, a backpack, holding weapons
+- Enemies: cockroaches, rival mice, rats — each one easy to tell apart by silhouette
+- UI: looks like a notebook/sketchbook page
+- Art needs to be sourced from somewhere (itch.io, OpenGameArt) or hand-drawn
 
 ---
 
 ## Core Loop
 
-1. Start in the **Base** (mouse burrow) — buy gear, mods, skills, consumables
-2. Choose a **Level** to infiltrate
-3. Navigate the level, fight enemies, collect **money + materials**
-4. Find a **mouse hole** in the wall and escape to extract safely
-5. Return to base with loot — upgrade, unlock, repeat
-6. Death = lose 90% of run earnings (keep 10%)
+1. Start in the **Base** (the mouse burrow) — buy gear, mods, skills, and supplies
+2. Pick a **Level** to sneak into
+3. Move through the level, fight enemies, grab **money and materials**
+4. Find a **mouse hole** in a wall and escape through it
+5. Bring your loot back to base — upgrade, unlock stuff, then go again
+6. If you die: you lose 90% of what you earned that run, but keep 10%
 
-**Easy to get into:** Clear objectives, forgiving early levels, intuitive controls
-**Hard to master:** Enemy variety, limited loadout space, risk/reward depth decisions, boss rooms, hazards
+**Easy to pick up:** clear goals, gentle early levels, controls that make sense right away
+**Hard to master:** lots of enemy types, limited space for gear, tough risk/reward choices, boss rooms, hazards
 
 ---
 
 ## Levels (4 Total)
 
-### Level 1 — The House *(Starting Level / Easiest)*
-- Interior of a home: kitchen, living room, hallway, bathroom
-- Obstacles: chair legs, table legs, mats/rugs (slow player), power cords, baseboards
-- Verticality: player can climb onto **countertops and tables** via ramps/ledges
-- Enemy types: basic roaches, house mice
-- Extraction: mouse holes in the baseboards
+### Level 1 — The House *(Starting level, easiest)*
+- Inside a home: kitchen, living room, hallway, bathroom
+- Obstacles: chair legs, table legs, rugs (slow you down), power cords, baseboards
+- You can climb up onto **countertops and tables** using ramps/ledges
+- Enemies: basic roaches, house mice
+- Escape route: mouse holes in the baseboards
 
 ### Level 2 — The Basement
-- Dark, damp, industrial feel — pipes, boxes, water puddles (slow), exposed wires (damage hazard)
-- More elite enemies, tighter corridors
-- Obstacles: cardboard boxes, pipes, shelf units
-- New hazard: standing water (slows movement)
-- Extraction: mouse holes near foundation walls
+- Dark, damp, industrial — pipes, boxes, puddles, exposed wires that hurt you
+- Tougher enemies, tighter corridors
+- Obstacles: cardboard boxes, pipes, shelves
+- New hazard: standing water (slows you down)
+- Escape route: mouse holes near the foundation walls
 
 ### Level 3 — The Attic
-- Dusty, open, cluttered — insulation patches, old boxes, wooden beams
-- Verticality: beams the player can walk along (raised platforms)
-- Enemies: rats and large insects
-- New hazard: insulation patches (slow + minor damage over time)
-- Extraction: gaps in the eaves / mouse holes near the roof edge
+- Dusty, open, cluttered — insulation, old boxes, wooden beams
+- You can walk along beams (raised platforms)
+- Enemies: rats and big insects
+- New hazard: insulation patches (slows you down and does a little damage over time)
+- Escape route: gaps in the eaves / mouse holes near the roof edge
 
 ### Level 4 — The Yard *(Hardest)*
-- Outdoor environment — grass, garden beds, patio tiles, a garden hose
-- Most open layout — long sightlines, flanking enemies
-- New hazard: wet grass patches (slow), bird shadow warnings (instant-kill AoE, dodge in time)
-- Enemies: all types + exclusives (ants, beetles)
-- Extraction: holes under the fence
+- Outdoors — grass, garden beds, patio tiles, a garden hose
+- The most open level — long sightlines, enemies can flank you
+- New hazard: wet grass (slows you down), bird shadows that warn you before an instant-kill strike (dodge in time or die)
+- Enemies: every type, plus yard-only ones (ants, beetles)
+- Escape route: holes under the fence
 
 ---
 
 ## Enemies (15 Types)
 
-Most enemies are **ranged**. Very few melee.
+Most enemies shoot from a distance. Only a few fight up close.
 
 | # | Name | Type | Movement | Attack | Notes |
 |---|------|------|----------|--------|-------|
-| 1 | House Roach | Ranged | Scurry (erratic) | Spits acid blobs (slow arc) | Basic enemy |
-| 2 | Big Roach | Ranged | Slow + steady | Charged acid burst (wider shot) | Tank variant |
-| 3 | Flying Roach | Ranged | Airborne, hovering | Drops acid bombs from above | Ignores ground obstacles |
-| 4 | House Mouse | Ranged | Walk + strafe | Fires small pellets (fast) | Rival faction |
-| 5 | Sniper Mouse | Ranged | Stationary + retreat | Laser-aimed long-range shot | High damage, telegraphed |
-| 6 | Shield Mouse | Ranged | Slow advance | Short-range burst, blocks front | Must be flanked or flanked-shot |
-| 7 | Rat Scout | Ranged | Fast dash-strafe | Quick burst fire, retreats | Very mobile |
-| 8 | Rat Bruiser | Melee | Charge | Heavy slam | One of very few melee |
-| 9 | Rat Gunner | Ranged | Cover-peek | Heavy minigun suppression | Suppresses player from cover |
-| 10 | Rat Commander | Ranged | Hangs back | Buffs nearby enemies, fires intermittently | Priority target |
-| 11 | Earwig | Ranged | Skitter sideways | Poison spit (DoT) | Low HP but fast |
-| 12 | Centipede | Melee | Winding path | Multi-segment body, ramming | Rare melee; wall-hugging pathing |
-| 13 | Fire Ant | Ranged | Swarm (group) | Tiny flame shots | Spawn in large groups |
-| 14 | Beetle Tank | Ranged | Slow + armored | Explosive shells | Very tanky, slow to turn |
-| 15 | Moth | Ranged | Erratic flight | Dust cloud (blinds player briefly) | Flies over obstacles |
+| 1 | House Roach | Ranged | Scurries around | Spits acid blobs (slow arc) | The basic enemy |
+| 2 | Big Roach | Ranged | Slow and steady | Charged acid burst (wider shot) | Tanky version |
+| 3 | Flying Roach | Ranged | Flies, hovers | Drops acid bombs from above | Ignores obstacles on the ground |
+| 4 | House Mouse | Ranged | Walks, strafes | Fires small pellets (fast) | Rival mouse faction |
+| 5 | Sniper Mouse | Ranged | Stays put, backs away | Laser-aimed long shot | Hits hard, but you can see it coming |
+| 6 | Shield Mouse | Ranged | Slowly advances | Short burst, blocks from the front | You have to flank it |
+| 7 | Rat Scout | Ranged | Fast dashes | Quick bursts, then retreats | Very mobile |
+| 8 | Rat Bruiser | Melee | Charges at you | Heavy slam | One of the few melee enemies |
+| 9 | Rat Gunner | Ranged | Peeks from cover | Heavy suppressing fire | Pins you down from cover |
+| 10 | Rat Commander | Ranged | Hangs back | Buffs nearby enemies, shoots sometimes | Kill this one first |
+| 11 | Earwig | Ranged | Skitters sideways | Poison spit (damage over time) | Low health but fast |
+| 12 | Centipede | Melee | Winds along walls | Multi-segment body, rams you | Rare melee type |
+| 13 | Fire Ant | Ranged | Moves in groups | Tiny flame shots | Shows up in swarms |
+| 14 | Beetle Tank | Ranged | Slow, armored | Explosive shells | Very tough, turns slowly |
+| 15 | Moth | Ranged | Flies erratically | Dust cloud that blinds you briefly | Can fly over obstacles |
 
 ---
 
 ## Weapons
 
 ### Loadout System
-- Player brings **2 guns** into each run:
-  - 1 **Main Weapon** (high power, limited ammo)
-  - 1 **Sidearm** (lighter, backup)
-- Swap between them with `Q` or scroll wheel
+- You bring **2 guns** into each run:
+  - 1 **Main Weapon** (strong, but limited ammo)
+  - 1 **Sidearm** (weaker, backup)
+- Swap between them with `Q` or the scroll wheel
 
 ### Main Weapons
 | Name | Type | Notes |
 |------|------|-------|
-| Assault Rifle | Ballistic | Already in game — baseline main |
-| Shotgun | Ballistic | Already in game |
-| Rifle | Ballistic (hitscan) | Already in game |
-| Flamethrower | Fire | Continuous cone, sets enemies on fire (DoT), limited range |
-| Acid Shooter | Chemical | Slow blob projectiles, AoE acid puddles on impact, melts armor |
-| Freeze Ray | Cryo | Slows and eventually freezes enemies solid |
-| Crossbow | Ballistic | Silent (doesn't alert enemies), high damage, slow fire |
-| SMG | Ballistic | High fire rate, low damage per bullet, fast reload |
-| Grenade Launcher | Explosive | Arcing projectile, AoE impact |
+| Assault Rifle | Ballistic | Already in the game — the default main weapon |
+| Shotgun | Ballistic | Already in the game |
+| Rifle | Ballistic (hitscan) | Already in the game |
+| Flamethrower | Fire | Cone of fire, burns enemies over time, short range |
+| Acid Shooter | Chemical | Slow blobs, leaves acid puddles, melts armor |
+| Freeze Ray | Cryo | Slows enemies, eventually freezes them solid |
+| Crossbow | Ballistic | Quiet (doesn't alert enemies), hits hard, slow to fire |
+| SMG | Ballistic | Fires fast, low damage per hit, reloads quickly |
+| Grenade Launcher | Explosive | Arcs through the air, area damage on impact |
 | Laser Pistol* | Energy | *(future)* Continuous beam, burns through cover |
 
 ### Sidearms
 | Name | Type | Notes |
 |------|------|-------|
-| Handgun | Ballistic | Already in game — baseline sidearm |
-| Mini Crossbow | Ballistic | Silent sidearm variant |
+| Handgun | Ballistic | Already in the game — the default sidearm |
+| Mini Crossbow | Ballistic | Quiet sidearm version |
 | Pocket Flamer | Fire | Short-burst flamethrower sidearm |
-| Dart Gun | Chemical | Poison dart, DoT sidearm |
-| Stun Baton | Electric | Close-range melee/energy stun *(rare melee option)* |
+| Dart Gun | Chemical | Poison dart, damage over time |
+| Stun Baton | Electric | Close-range stun weapon *(one of the rare melee options)* |
 
 ---
 
 ## Weapon Mods
 
-New system — mods attach to weapons and modify their behavior.
+Mods attach to weapons and change how they work.
 
-Each weapon has **mod slots** (unlockable). Mods are bought in the base with materials.
+Each weapon has a few mod slots you unlock over time. You buy mods at the base using materials.
 
 | Mod | Effect |
 |-----|--------|
 | Expanded Mag | +50% ammo capacity |
 | Fast Loader | -30% reload time |
-| Hollow Point | +25% damage, -1 piercing |
+| Hollow Point | +25% damage, but 1 less enemy pierced |
 | Piercing Round | Bullets pass through 1 enemy |
-| Silencer | Greatly reduces enemy alert radius |
-| Incendiary | Bullets apply brief burn (DoT) |
-| Cryo Round | Bullets apply brief slow |
-| Scope | +20% effective range, ADS zoom |
-| Foregrip | Reduces spread by 40% |
-| Drum Mag | 2x ammo, +40% reload time |
-| Acid Tip | Bullets apply acid DoT |
+| Silencer | Enemies notice you from much farther away less often |
+| Incendiary | Bullets set enemies on fire briefly |
+| Cryo Round | Bullets slow enemies briefly |
+| Scope | +20% range, lets you aim down sights |
+| Foregrip | Cuts spread by 40% |
+| Drum Mag | 2x ammo, but 40% slower reload |
+| Acid Tip | Bullets apply acid damage over time |
 
 ---
 
 ## Skills
 
-New system — passive and active abilities unlocked in the base with materials/money.
+Passive and active abilities you unlock at the base with materials or money.
 
 ### Passive Skills
 | Skill | Effect |
 |-------|--------|
 | Nimble | +15% move speed |
 | Iron Hide | +25 max HP |
-| Scavenger | +15% loot drop chance |
-| Light Foot | Movement makes less noise (smaller enemy alert radius) |
+| Scavenger | +15% chance of loot dropping |
+| Light Foot | You're quieter — enemies notice you from less far away |
 | Quick Hands | -15% weapon swap time |
-| Adrenaline Rush | After a kill, brief speed boost |
-| Tough Paws | -20% fall damage from heights |
+| Adrenaline Rush | Short speed boost after a kill |
+| Tough Paws | -20% damage from falling |
 | Pack Rat | +1 grenade slot |
-| Keen Eye | Reveals enemy positions briefly when entering area |
+| Keen Eye | Briefly reveals enemy positions when you enter an area |
 
-### Active Skills (cooldown-based, triggered by key)
+### Active Skills (on a cooldown, triggered by a key)
 | Skill | Effect | Cooldown |
 |-------|--------|----------|
-| Smoke Cloak | Brief invisibility to enemies | 45s |
+| Smoke Cloak | Briefly invisible to enemies | 45s |
 | Frenzy | Double fire rate for 5s | 60s |
-| Shield Bubble | Absorb next 3 hits | 90s |
-| Rally | Restore 20 HP instantly | 120s |
+| Shield Bubble | Blocks the next 3 hits | 90s |
+| Rally | Instantly heal 20 HP | 120s |
 | Berserk | Melee damage x5 for 8s | 75s |
 
 ---
 
 ## Grenades / Throwables
 
-Player can **buy and bring** consumables into each run. Equip in base, limited slots.
+You can buy these at the base and bring a limited number into each run.
 
 | Grenade | Effect | Description |
 |---------|--------|-------------|
-| Fire Grenade | AoE fire zone, DoT on enemies | Burning ring lasts 8s |
-| Ice Grenade | AoE freeze/slow zone | Slows 60%, full freeze 3s |
-| Smoke Grenade | AoE smoke cloud | Enemies inside cannot see player; player can move freely through it |
-| Healing Aura | Player-centered healing field | +5 HP/sec for 10s in radius |
-| Acid Bomb | AoE acid puddle | Melts enemy armor, DoT |
-| Flashbang | Blinds enemies in radius | 4s disorientation |
+| Fire Grenade | Area fire zone, damage over time | Burning ring lasts 8s |
+| Ice Grenade | Area freeze/slow zone | Slows 60%, fully freezes for 3s |
+| Smoke Grenade | Area smoke cloud | Enemies inside can't see you; you can move through it freely |
+| Healing Aura | Heals you over time in a radius around you | +5 HP/sec for 10s |
+| Acid Bomb | Area acid puddle | Melts armor, damage over time |
+| Flashbang | Blinds enemies in the area | 4s of them being unable to see |
 | EMP | Stuns mechanical/electric enemies | *(for future enemy types)* |
 
 ---
@@ -198,113 +198,113 @@ Player can **buy and bring** consumables into each run. Equip in base, limited s
 
 | Hazard | Level | Effect |
 |--------|-------|--------|
-| Rug/Mat | House | Slows movement |
-| Table leg | House | Cover obstacle |
-| Power cord | House | Trips (brief stumble animation) |
-| Wet puddle | Basement | Slows movement |
-| Exposed wire | Basement | Touch = damage |
-| Insulation | Attic | Slows + minor DoT |
-| Bird shadow | Yard | Warning → instant-kill AoE (dodge window) |
-| Wet grass | Yard | Slows movement |
-| Mouse trap | All | Instant death trap, visible but easy to spot |
-| Sticky tape | House | Holds player in place briefly |
+| Rug/Mat | House | Slows you down |
+| Table leg | House | Something to hide behind |
+| Power cord | House | Trips you (short stumble animation) |
+| Wet puddle | Basement | Slows you down |
+| Exposed wire | Basement | Touching it hurts |
+| Insulation | Attic | Slows you down + minor damage over time |
+| Bird shadow | Yard | Warning, then an instant-kill strike (you can dodge if you're fast) |
+| Wet grass | Yard | Slows you down |
+| Mouse trap | All levels | Instant death, but easy to spot |
+| Sticky tape | House | Holds you in place briefly |
 
 ---
 
-## Verticality System
+## Climbing / Elevation
 
-- Counters, tables, and beams are **elevated platforms**
-- Player reaches them via **ramps, ledges, or climbing edges** (press E near edge)
-- Elevated positions give height advantage: enemies on floor can't melee you
-- Some enemies can also reach elevated positions (flying, climbing variants)
-- Falls from high enough = damage
-- Visual: camera stays top-down but elevated tiles are brighter/outlined
+- Counters, tables, and beams are **raised platforms** you can stand on
+- You reach them with ramps, ledges, or by climbing an edge (press E near one)
+- Being up high means enemies on the floor can't hit you in melee
+- Some enemies can also reach high spots (flying or climbing ones)
+- Falling from high enough hurts you
+- The camera stays top-down, but raised tiles look brighter/outlined so you can tell
 
 ---
 
-## Extraction: Mouse Holes
+## Escaping: Mouse Holes
 
-- Replace current EXIT door with **mouse holes** cut into walls/baseboards
-- Multiple holes per map (2-4), not all accessible from the start
-- Some are blocked by obstacles or require a key item to clear
-- Visual: ragged oval hole in the wall with dirt/chewing marks around it
-- Interact with `E` when adjacent
+- Instead of an EXIT door, you escape through **mouse holes** chewed into walls/baseboards
+- Each map has 2-4 holes, and not all of them are open right away
+- Some are blocked by obstacles, or need a key item first
+- They look like ragged oval holes with dirt/chew marks around them
+- Press `E` near one to escape
 
 ---
 
 ## Sound Design
 
-Full contextual sound effects needed for:
+Full sound effects are needed for:
 
-- Weapon sounds: each gun has unique fire, reload, empty-click sounds
-- Enemy sounds: roach skitter, rat chatter, hit/death squeaks/crunches
-- Throwable effects: fire crackle, ice shatter, smoke hiss, healing hum
-- Ambient per level: house hum/AC, basement drip, attic wind, yard insects
-- UI sounds: upgrade purchase, weapon equip, extraction success, death
-- Hazard sounds: trap snap, wire zap, puddle splash
-- Player sounds: footstep variations (tile, wood, carpet, grass), dash whoosh
-- Victory/death stingers
+- Weapons: each gun needs its own fire, reload, and empty-click sounds
+- Enemies: roach skitter, rat chatter, hit/death squeaks and crunches
+- Throwables: fire crackle, ice shatter, smoke hiss, healing hum
+- Ambience per level: house hum/AC, basement drip, attic wind, yard bugs
+- UI: buying upgrades, equipping weapons, extracting successfully, dying
+- Hazards: trap snap, wire zap, puddle splash
+- Player: footstep sounds for different floors (tile, wood, carpet, grass), dash whoosh
+- Victory and death stingers
 
-**Sources:** Freesound.org, ZapSplat, itch.io audio packs — or procedural generation for real-time sounds.
+**Where to get sounds:** Freesound.org, ZapSplat, itch.io audio packs — or generate them on the fly.
 
 ---
 
 ## Animations
 
-- Player: walk cycle, dash, reload, shoot, melee, death, idle
-- Enemies: walk, attack, hit reaction, death (poof/scatter — not gory)
-- Projectiles: spin/trail on bullets, blob wobble on acid, flame flicker
-- Hit effects: cartoony star flash, number popups for damage
-- Grenade effects: expanding ring animations per type (fire = orange shimmer, ice = crystallize, smoke = billow, heal = green pulse)
-- Extraction: player squeezes into mouse hole (small animation)
-- Elevation: player hops up/down ledge
+- Player: walking, dashing, reloading, shooting, melee, dying, standing still
+- Enemies: walking, attacking, getting hit, dying (poof/scatter — not gory)
+- Projectiles: bullets spin and trail, acid blobs wobble, flames flicker
+- Hit effects: cartoony flash, floating damage numbers
+- Grenade effects: a ring animation for each type (fire = orange shimmer, ice = crystallize, smoke = billow, heal = green pulse)
+- Escaping: a small animation of the player squeezing into the mouse hole
+- Climbing: player hops up/down a ledge
 
 ---
 
-## Replayability Features
+## What Keeps People Playing
 
-- **Randomized maps** per run (same zones, different obstacle/enemy/loot layout)
-- **Random events** mid-run: "pest control spray" forces early extraction, "crumb trail" spawns loot rush
-- **Daily challenge runs** with modified rules (more enemies, limited ammo, etc.)
-- **Enemy scaling** makes higher-difficulty runs feel distinct, not just harder
-- **Build variety** from skill + mod combinations — many loadout permutations
-- **Unlockable mouse skins/cosmetics** for grinding milestones
+- **Randomized maps** each run (same areas, but different obstacle/enemy/loot layout)
+- **Random events** mid-run: "pest control spray" forces you to leave early, "crumb trail" spawns a rush of loot
+- **Daily challenge runs** with different rules (more enemies, limited ammo, etc.)
+- **Enemies get tougher** in ways that feel different, not just "more health"
+- **Lots of build variety** from mixing skills and mods
+- **Unlockable mouse skins** for hitting milestones
 
 ---
 
 ## Progression & Economy
 
-- **Money:** Drops from enemies, used to buy weapons, grenades, and some skills
-- **Materials:** Rare drops (scraps, seeds, wire bits), used for weapon mods and advanced skills
-- **Upgrade tree:** Persistent, carries between runs
-- **Risk/reward:** Higher-level zones = more loot + more danger
+- **Money:** drops from enemies, spent on weapons, grenades, and some skills
+- **Materials:** rarer drops (scraps, seeds, wire bits), used for weapon mods and advanced skills
+- **Upgrades:** persistent — carry over between runs
+- **Risk/reward:** harder zones = more loot, more danger
 
 ---
 
-## Base Hub Updates
+## Base Hub — Things to Add
 
-- Add **Armory** section: unlock and mod weapons
-- Add **Skills board**: learn passive/active skills
-- Add **Supply crate**: buy grenades/consumables for next run
-- Add **Level select door**: choose which of 4 levels to enter
-- Add **Journal/Codex**: track enemy types seen, kills, stats per run
+- **Armory:** unlock and mod weapons
+- **Skills board:** learn passive/active skills
+- **Supply crate:** buy grenades/supplies for your next run
+- **Level select door:** pick which of the 4 levels to enter
+- **Journal/Codex:** track enemies you've seen, kills, and stats per run
 
 ---
 
 ## Development Phases
 
 ### Phase 1 — Foundation & Feel *(Current Focus)*
-- [ ] Thematic re-skin: player → mouse, enemies → roaches/mice, exit → mouse holes
-- [ ] Hand-drawn/charming art sprites (source or create)
-- [ ] Sound effects overhaul (contextual audio for all actions)
+- [ ] Re-skin: player becomes a mouse, enemies become roaches/mice, exit becomes mouse holes
+- [ ] Hand-drawn/charming art (source it or make it)
+- [ ] Sound effects for everything
 - [ ] 2-gun loadout system (main + sidearm)
 - [ ] Grenade system (fire, ice, smoke, heal)
-- [ ] Level 1 map redesign (house interior, table legs, mats, verticality)
+- [ ] Level 1 redesign (house interior, table legs, mats, climbing)
 
 ### Phase 2 — Content Expansion
-- [ ] All 15 enemy types implemented
-- [ ] Full weapon roster (flamethrower, acid shooter, freeze ray, crossbow, SMG, grenade launcher)
-- [ ] All sidearm options
+- [ ] All 15 enemy types built
+- [ ] Full weapon list (flamethrower, acid shooter, freeze ray, crossbow, SMG, grenade launcher)
+- [ ] All sidearms
 - [ ] Weapon mod system
 - [ ] Skill system (passive + active)
 - [ ] Level 2 (Basement)
@@ -313,8 +313,8 @@ Full contextual sound effects needed for:
 - [ ] Level 3 (Attic) + Level 4 (Yard)
 - [ ] Randomized map layouts
 - [ ] Random mid-run events
-- [ ] Environmental hazards (all types)
-- [ ] Full verticality system
+- [ ] All environmental hazards
+- [ ] Full climbing/elevation system
 - [ ] Daily challenges
 
 ### Phase 4 — Polish
@@ -322,9 +322,9 @@ Full contextual sound effects needed for:
 - [ ] Music per level
 - [ ] Cosmetics / unlockable skins
 - [ ] Journal/Codex
-- [ ] Balancing pass
+- [ ] Balance pass
 - [ ] Performance optimization
 
 ---
 
-*Last updated: 2026-03-13*
+*Last updated: 2026-08-09*

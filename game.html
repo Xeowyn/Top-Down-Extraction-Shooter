@@ -163,7 +163,6 @@
         const mapWidth = 8600;
         const mapHeight = 6200;
 
-        // Camera object
         const camera = {
             x: 0,
             y: 0
@@ -174,7 +173,6 @@
             y: mapHeight / 2
         };
 
-        // Player object
         const player = {
             x: playerSpawn.x,
             y: playerSpawn.y,
@@ -278,7 +276,6 @@
             { x: 5240, y: 4100, width: 120, height: 120 }
         ];
 
-        // Bullets array
         const bullets = [];
         const bulletTrailMin = 6;
         const bulletTrailMax = 14;
@@ -708,10 +705,8 @@
         // Particles array for explosions
         const particles = [];
 
-        // Enemies array
         const enemies = [];
 
-        // Coins array
         const coins = [];
         const healingItems = [];
 
@@ -937,10 +932,9 @@
         let _dbReady    = false;
         let _hsPromptOpen = false; // true while the initials input is showing
         let _pendingScore = 0;     // score at extraction time, shown in prompt
-        // Snapshot of the current run's stats, used when saving the highscore entry.
-        // Kept separate from the run-save queue so DB init can't clobber it.
+        // Copy of this run's stats, kept separate so it can't get overwritten
         let _hsRunStats = { kills: 0, coins: 0, levelId: 1 };
-        // Run record waiting to be written to DB once it's ready
+        // Run record waiting to be saved once the database is ready
         let _queuedRun  = null;
 
         // Score formula — no DB dependency, mirrors db.js calcScore
@@ -969,7 +963,7 @@
                 const raw      = input.value.trim().toUpperCase();
                 const initials = (raw || 'AAA').replace(/[^A-Z]/g, 'A').padEnd(3, 'A').slice(0, 3);
 
-                // Snapshot stats now so async timing can't change them
+                // Copy the stats now so they can't change while we wait on the save
                 const snap = { ..._hsRunStats };
 
                 function doSaveHighscore() {
@@ -985,7 +979,7 @@
                 if (_dbReady) {
                     doSaveHighscore();
                 } else {
-                    // DB still initialising — poll until ready (max 10 s)
+                    // Database isn't ready yet — check every 100ms, give up after 10s
                     const deadline = Date.now() + 10000;
                     const poll = setInterval(() => {
                         if (_dbReady)           { clearInterval(poll); doSaveHighscore(); }
@@ -1298,9 +1292,8 @@
                 } catch(e) {}
             }
 
-            // ── Save run to database & check for highscore ──
-            // Score is calculated locally so the prompt works even if the DB
-            // is still loading. The actual DB write is queued if not ready yet.
+            // Score is worked out here (not in the DB) so the prompt still works
+            // if the database hasn't finished loading yet.
             const _kills = runEnemiesKilled;
             const _coins = Math.floor(runMoneyEarned);
             _pendingScore = _calcScore(_kills, _coins, currentLevel, true);
@@ -1319,12 +1312,11 @@
                 _queuedRun = runRecord;
             }
 
-            // Snapshot stats for the highscore entry (safe from any async clobber)
+            // Save these now so they can't change before the player types initials
             _hsRunStats = { kills: _kills, coins: _coins, levelId: currentLevel };
 
-            // Show the initials prompt if this qualifies for the leaderboard.
-            // When the DB isn't ready we can't check, so we always prompt —
-            // the board is empty anyway on a fresh session.
+            // If the database isn't ready we can't check the leaderboard, so just
+            // show the prompt anyway — it's empty on a fresh session either way.
             const qualifies = _dbReady ? GameDB.isHighscore(_pendingScore) : true;
             if (qualifies) {
                 setTimeout(() => {
@@ -2449,7 +2441,6 @@
             }
         }
 
-        // Update bullets
         function updateBullets() {
             for (let i = bullets.length - 1; i >= 0; i--) {
                 bullets[i].x += bullets[i].velocityX;
@@ -2505,7 +2496,6 @@
             }
         }
 
-        // Update enemy bullets
         function updateEnemyBullets() {
             for (let i = enemyBullets.length - 1; i >= 0; i--) {
                 const bullet = enemyBullets[i];
@@ -2587,7 +2577,6 @@
             }
         }
 
-        // Create explosion effect
         function createExplosion(x, y) {
             const particleCount = 8;
             for (let i = 0; i < particleCount; i++) {
@@ -2606,7 +2595,6 @@
             }
         }
 
-        // Update particles
         function updateParticles() {
             for (let i = particles.length - 1; i >= 0; i--) {
                 particles[i].x += particles[i].velocityX;
@@ -3167,7 +3155,7 @@
                     const normalX = -edgeDy;
                     const normalY = edgeDx;
                     
-                    // Check if edge faces away from player (dot product)
+                    // Check if this edge faces away from the player
                     const dotProduct = dx * normalX + dy * normalY;
                     
                     if (dotProduct > 0) {
@@ -3865,7 +3853,7 @@
 
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const enemy = enemies[i];
-                // Clean up enemies killed by AOE splash on a previous iteration
+                // Remove enemies that got killed by splash damage earlier in this loop
                 if (enemy.health <= 0) {
                     killEnemy(i, true);
                     continue;
@@ -4104,7 +4092,7 @@
                     }
                 }
 
-                // Re-evaluate LOS after movement for cover decisions
+                // Check sightline again after moving, to decide about cover
                 const movedCenterX = enemy.x + enemy.width / 2;
                 const movedCenterY = enemy.y + enemy.height / 2;
                 const movedHasLOS = target ? hasLineOfSight(movedCenterX, movedCenterY, targetX, targetY) : false;
@@ -4258,7 +4246,7 @@
                         playHitSound(playerDistance);
                         if (!bullets[j].isFlame) createExplosion(bullets[j].x, bullets[j].y);
 
-                        // AOE splash: damage all other enemies within aoeRadius
+                        // Splash damage: also hit other enemies nearby
                         const aoe = bullets[j] ? (bullets[j].aoeRadius || 0) : 0;
                         if (aoe > 0) {
                             const bx = bullets[j].x, by = bullets[j].y;
@@ -4308,7 +4296,6 @@
             }
         }
 
-        // Update difficulty
         function updateDifficulty() {
             if (difficulty < maxDifficulty) {
                 difficultyProgress += difficultyIncreaseRate;
@@ -4325,7 +4312,6 @@
             }
         }
 
-        // Update coins
         function updateCoins() {
             const pickupRadius = player.pickupRange || 40;
             
@@ -4377,7 +4363,6 @@
             }
         }
 
-        // Draw mouse player character
         function drawMouseCharacter(cx, cy, angle, hitFlash, burnFlash, alpha, walkPhase, skin) {
             const s = skin || skinDefs[equippedSkinId] || skinDefs.default;
             ctx.save();
@@ -4463,7 +4448,6 @@
             ctx.restore();
         }
 
-        // Draw player
         function drawPlayer() {
             const cx = player.x + player.width / 2 - camera.x;
             const cy = player.y + player.height / 2 - camera.y;
@@ -4602,7 +4586,6 @@
             }
         }
 
-        // Draw particles
         function drawParticles() {
             for (let particle of particles) {
                 const alpha = particle.life / particle.maxLife;
@@ -5046,7 +5029,6 @@
             ctx.restore();
         }
 
-        // Draw enemies with themed art
         function drawEnemies() {
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
@@ -5136,7 +5118,6 @@
             ctx.globalAlpha = 1;
         }
 
-        // Draw coins
         function drawCoins() {
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
@@ -5185,7 +5166,7 @@
             }
         }
 
-        // Draw difficulty bar — DANGER LEVEL
+        // The bar the game calls "DANGER LEVEL"
         function drawDifficultyBar() {
             const barWidth = 300;
             const barHeight = 20;
@@ -5212,7 +5193,7 @@
             ctx.fillText(`${levelNames[currentLevel] || 'LEVEL ' + currentLevel}  ·  DANGER ${difficulty}  ·  ${Math.floor(difficultyProgress)}%`, canvas.width / 2, barY + barHeight / 2);
         }
 
-        // Draw money counter — crumbs
+        // Money is called "crumbs" in this game
         function drawMoneyCounter() {
             ctx.fillStyle = '#e8c878';
             ctx.font = 'bold 18px Arial';
@@ -5260,7 +5241,6 @@
             hideStatTooltip();
         }
 
-        // Draw health bar
         function drawHealthBar() {
             const barWidth = 200;
             const barHeight = 20;
@@ -5284,7 +5264,7 @@
             ctx.textBaseline = 'middle';
             ctx.fillText(`HP: ${Math.floor(player.health)}/${Math.floor(player.maxHealth)}`, barX + 5, barY + barHeight / 2);
 
-            // Attack radius indicator — subtle ring around player showing AOE range
+            // Faint ring around the player showing how far its splash damage reaches
             const wId = activeSlot === 'main' ? selectedWeaponId : sidearmId;
             const wCfg = weaponConfigs[wId];
             if (wCfg && wCfg.aoeRadius > 0) {
@@ -5303,7 +5283,6 @@
             }
         }
 
-        // Draw dual-weapon HUD at bottom center
         function drawWeaponHUD() {
             const slotW = 120;
             const slotH = 46;
@@ -5917,7 +5896,6 @@
             ctx.restore();
         }
 
-        // Update death screen
         function updateDeathScreen() {
             deathTimer++;
             
@@ -5936,7 +5914,6 @@
             }
         }
 
-        // Draw death screen
         function drawDeathScreen() {
             // Slow motion effect on particles
             const slowMoFactor = 0.3;
@@ -6085,7 +6062,6 @@
             }
         }
 
-        // Draw pause overlay
         function drawPauseOverlay() {
             const cx = canvas.width / 2;
             const cy = canvas.height / 2;
@@ -6166,7 +6142,7 @@
             ctx.fillText('ESC to resume', cx, py + ph - 10);
         }
 
-        // Draw background — warm house interior theme
+        // Each level has its own background theme
         function drawBackground() {
             if (currentLevel === 2) {
                 // === BASEMENT: dark concrete ===
@@ -6396,7 +6372,7 @@
             }
         }
 
-        // Draw obstacles — style depends on current level
+        // Obstacles look different per level
         function drawObstacles() {
             for (let obstacle of obstacles) {
                 const ox = obstacle.x - camera.x;
@@ -6889,7 +6865,6 @@
             ctx.restore();
         }
 
-        // Game loop
         function gameLoop() {
             gameTime++;
             if (muzzleFlashTimer > 0) muzzleFlashTimer--;

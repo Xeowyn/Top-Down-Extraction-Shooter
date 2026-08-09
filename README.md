@@ -1,19 +1,19 @@
 # Mousehunt: Extraction
 
-A top-down extraction shooter built with vanilla HTML5 Canvas and JavaScript — no engine, no build step. You play as a mouse scavenging dangerous household environments for loot, fighting off roaches and rival rodents, and escaping through mouse holes before you die.
+A game where you play as a mouse. You sneak into a house, grab loot, fight off bugs and other mice, and then escape before you get killed. It's made with plain HTML, CSS, and JavaScript — no game engine, nothing to install or build.
 
-See [`GAME_PLAN.md`](GAME_PLAN.md) for the full design vision, level list, and mechanics.
+Check out [`GAME_PLAN.md`](GAME_PLAN.md) to see the full design: all the levels, enemies, weapons, and what's planned next.
 
 ## How to run it
 
-No installation or build step required — it's plain HTML/JS/CSS.
+You don't need to install anything.
 
 **Easiest way:**
 
 1. Download or clone this repo
-2. Open `index.html` directly in a browser
+2. Open `index.html` in your browser
 
-**Recommended (avoids browser file-access restrictions):**
+**Better way (some browsers block local files from working right):**
 
 ```bash
 git clone https://github.com/Xeowyn/Top-Down-Extraction-Shooter.git
@@ -39,18 +39,18 @@ Then open `http://localhost:8000` in your browser.
 
 ## How to play
 
-1. From the main menu (`index.html`), enter a mouse name and press Play
-2. You start in the **Base** — buy gear, mods, skills, and consumables
-3. Choose a level to infiltrate and fight through it, collecting money and materials
-4. Find a mouse hole and extract before you die (dying loses 90% of that run's earnings)
-5. Return to base, spend your loot, repeat
-6. View past runs on the [Highscores](highscores.html) page
+1. On the main menu (`index.html`), type a name for your mouse and hit Play
+2. You start in the **Base** — buy weapons, upgrades, and supplies here
+3. Pick a level and fight your way through it, picking up money and materials
+4. Find a mouse hole and escape before you die (if you die, you only keep 10% of what you earned that run)
+5. Go back to base, spend what you earned, then do it again
+6. Check the [Highscores](highscores.html) page to see your best runs
 
-## File structure
+## What's in each file
 
-- `index.html` — main menu / start screen
-- `base.html` — base hub (shop, upgrades, level select)
-- `game.html` — the core gameplay loop and Canvas rendering
-- `highscores.html` — leaderboard of past runs
-- `db.js` — local save/highscore storage, backed by [sql.js](https://sql.js.org/) (SQLite compiled to WebAssembly) persisted to `localStorage`
-- `GAME_PLAN.md` — living design document
+- `index.html` — the main menu / start screen
+- `base.html` — the base: shop, upgrades, pick a level
+- `game.html` — the actual gameplay, drawn on a Canvas
+- `highscores.html` — shows your best past runs
+- `db.js` — saves your runs and highscores. Uses [sql.js](https://sql.js.org/) (a real SQLite database that runs in the browser) and stores everything in `localStorage`
+- `GAME_PLAN.md` — the design doc, kept up to date as ideas change
