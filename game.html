@@ -3538,8 +3538,11 @@
                 });
             }
             
-            // All run crumbs lost on death — banked crumbs in localStorage are untouched
-            deathMoneyPenalty = Math.floor(money);
+            // Keep 10% of run crumbs on death, same as extraction banks 100%
+            const keptAmount = Math.floor(runMoneyEarned * 0.1);
+            const prevBanked = parseInt(localStorage.getItem('mh_bankedCrumbs') || '0', 10);
+            localStorage.setItem('mh_bankedCrumbs', String(prevBanked + keptAmount));
+            deathMoneyPenalty = Math.floor(money) - keptAmount;
             money = 0;
             
             recordRunToJournal(false);
@@ -5889,6 +5892,27 @@
             layout.obstacles.forEach(o => obstacles.push(o));
             layout.hazards.forEach(h => envHazards.push(h));
             levelSpawnPos = layout.spawnPos;
+
+            // Obstacles are randomly placed and can overlap the room-center spawn point;
+            // search outward in rings for the nearest clear spot so the player never spawns stuck.
+            if (checkObstacleCollision(levelSpawnPos[0] - player.width / 2, levelSpawnPos[1] - player.height / 2, player.width, player.height)) {
+                const spawnZone = walkableZones[0];
+                let found = false;
+                for (let ring = 20; ring <= Math.max(spawnZone.width, spawnZone.height) && !found; ring += 20) {
+                    for (let a = 0; a < Math.PI * 2 && !found; a += Math.PI / 12) {
+                        const cx = levelSpawnPos[0] + Math.cos(a) * ring;
+                        const cy = levelSpawnPos[1] + Math.sin(a) * ring;
+                        const px = cx - player.width / 2, py = cy - player.height / 2;
+                        if (px < spawnZone.x + 20 || py < spawnZone.y + 20 ||
+                            px + player.width > spawnZone.x + spawnZone.width - 20 ||
+                            py + player.height > spawnZone.y + spawnZone.height - 20) continue;
+                        if (!checkObstacleCollision(px, py, player.width, player.height)) {
+                            levelSpawnPos = [Math.round(cx), Math.round(cy)];
+                            found = true;
+                        }
+                    }
+                }
+            }
 
             // Per-biome decorative generation using the new walkableZones
             if (currentLevel === 2) {
