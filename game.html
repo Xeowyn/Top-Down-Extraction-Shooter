@@ -25,13 +25,107 @@
             height: 100%;
             cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='6'/%3E%3Cpath d='M12 2v4M12 18v4M2 12h4M18 12h4'/%3E%3C/g%3E%3C/svg%3E") 12 12, crosshair;
         }
+
+        #combatLog {
+            position: fixed;
+            right: 12px;
+            top: 60px;
+            width: 200px;
+            height: 280px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.55);
+            border: 1px solid #333;
+            padding: 4px 6px;
+            font-family: monospace;
+            font-size: 11px;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+        }
+        #combatLog .log-msg {
+            line-height: 1.4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #statTooltip {
+            position: fixed;
+            background: rgba(10,10,20,0.92);
+            border: 1px solid #555;
+            color: #ddd;
+            font-size: 12px;
+            padding: 6px 10px;
+            pointer-events: none;
+            display: none;
+            max-width: 200px;
+            line-height: 1.5;
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
+    <div id="combatLog"></div>
+    <div id="statTooltip"></div>
+
+    <!-- ── Highscore initials prompt ── -->
+    <div id="hsPrompt" style="
+        display: none;
+        position: fixed;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0,8,0,0.97);
+        border: 2px solid #00ff00;
+        color: #00ff00;
+        font-family: 'Courier New', monospace;
+        text-align: center;
+        padding: 32px 48px;
+        z-index: 9999;
+        box-shadow: 0 0 40px #00ff0033;
+        min-width: 320px;
+    ">
+        <div style="font-size:11px; letter-spacing:3px; color:#44aa44; margin-bottom:8px;">NEW HIGH SCORE</div>
+        <div id="hsFinalScore" style="font-size:42px; font-weight:700; margin-bottom:4px;">0</div>
+        <div id="hsScoreBreakdown" style="font-size:12px; color:#44aa44; margin-bottom:20px;"></div>
+        <div style="font-size:13px; color:#888; letter-spacing:2px; margin-bottom:10px;">ENTER YOUR INITIALS</div>
+        <input id="hsInitialsInput" maxlength="3" autocomplete="off" spellcheck="false"
+            style="
+                background: #000;
+                border: 1px solid #00ff00;
+                color: #00ff00;
+                font-family: 'Courier New', monospace;
+                font-size: 32px;
+                font-weight: 700;
+                letter-spacing: 10px;
+                text-align: center;
+                text-transform: uppercase;
+                width: 120px;
+                padding: 8px;
+                outline: none;
+                margin-bottom: 20px;
+                display: block;
+                margin-left: auto;
+                margin-right: auto;
+            ">
+        <button id="hsSubmitBtn"
+            style="
+                border: 2px solid #00ff00;
+                background: transparent;
+                color: #00ff00;
+                font-family: 'Courier New', monospace;
+                font-size: 14px;
+                letter-spacing: 2px;
+                padding: 8px 24px;
+                cursor: pointer;
+            ">SUBMIT</button>
+        <div style="margin-top:12px; font-size:11px; color:#333;">Press Enter to submit · ESC to skip</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/sql-wasm.js"></script>
+    <script src="db.js"></script>
 
     <script>
-        const GAME_BUILD = '20260323a';
+        const GAME_BUILD = '20260422a';
         const currentUrl = new URL(window.location.href);
         if (currentUrl.searchParams.get('v') !== GAME_BUILD) {
             currentUrl.searchParams.set('v', GAME_BUILD);
@@ -190,6 +284,10 @@
         const bulletTrailMax = 14;
         const bulletTrailAlpha = 0.45;
         const baseWeaponIds = ['handgun', 'smg', 'ar', 'rifle', 'shotgun', 'flamethrower', 'acidShooter', 'crossbow', 'burstRifle', 'sawedOffShotgun'];
+        // Shield item (equippable in off-hand with 1H weapons)
+        const shieldDef = { id: 'shield', name: 'Shield', desc: '-25% damage taken', damageReduction: 0.25 };
+        let shieldEquipped = false;
+
         const weaponConfigs = {
             handgun: {
                 id: 'handgun',
@@ -202,7 +300,9 @@
                 shotsPerTrigger: 1,
                 spread: 0.05,
                 fireCooldownFrames: 10,
-                category: 'sidearm'
+                category: 'sidearm',
+                twoHanded: false,
+                aoeRadius: 30
             },
             smg: {
                 id: 'smg',
@@ -215,7 +315,9 @@
                 shotsPerTrigger: 1,
                 spread: 0.28,
                 fireCooldownFrames: 5,
-                category: 'sidearm'
+                category: 'sidearm',
+                twoHanded: false,
+                aoeRadius: 22
             },
             ar: {
                 id: 'ar',
@@ -228,7 +330,9 @@
                 shotsPerTrigger: 1,
                 spread: 0.32,
                 fireCooldownFrames: 12,
-                category: 'main'
+                category: 'main',
+                twoHanded: true,
+                aoeRadius: 40
             },
             rifle: {
                 id: 'rifle',
@@ -242,7 +346,9 @@
                 spread: 0.02,
                 fireCooldownFrames: 90,
                 range: 2200,
-                category: 'main'
+                category: 'main',
+                twoHanded: true,
+                aoeRadius: 50
             },
             shotgun: {
                 id: 'shotgun',
@@ -255,7 +361,9 @@
                 shotsPerTrigger: 6,
                 spread: 0.65,
                 fireCooldownFrames: 60,
-                category: 'main'
+                category: 'main',
+                twoHanded: true,
+                aoeRadius: 65
             },
             flamethrower: {
                 id: 'flamethrower',
@@ -272,7 +380,10 @@
                 appliesBurn: true,
                 burnDamage: 2.0,
                 burnDuration: 150,
-                color: '#ff4400'
+                color: '#ff4400',
+                twoHanded: true,
+                aoeRadius: 55,
+                skipLogDmg: true
             },
             acidShooter: {
                 id: 'acidShooter',
@@ -287,7 +398,9 @@
                 fireCooldownFrames: 22,
                 category: 'main',
                 appliesAcid: true,
-                color: '#aaff00'
+                color: '#aaff00',
+                twoHanded: true,
+                aoeRadius: 50
             },
             crossbow: {
                 id: 'crossbow',
@@ -302,7 +415,9 @@
                 fireCooldownFrames: 75,
                 category: 'main',
                 silent: true,
-                color: '#884400'
+                color: '#884400',
+                twoHanded: true,
+                aoeRadius: 45
             },
             burstRifle: {
                 id: 'burstRifle',
@@ -317,7 +432,9 @@
                 fireCooldownFrames: 55,
                 burstCount: 3,
                 burstDelay: 5,
-                category: 'main'
+                category: 'main',
+                twoHanded: true,
+                aoeRadius: 40
             },
             sawedOffShotgun: {
                 id: 'sawedOffShotgun',
@@ -330,7 +447,9 @@
                 shotsPerTrigger: 7,
                 spread: 0.95,
                 fireCooldownFrames: 55,
-                category: 'sidearm'
+                category: 'sidearm',
+                twoHanded: false,
+                aoeRadius: 60
             }
         };
         const enemyWeaponConfigs = {
@@ -484,8 +603,35 @@
         let burstFireQueue = []; // queued burst shots [{targetX, targetY, timer}]
         let footstepTimer = 0;
 
+        // Combat log
+        const combatLogEl = document.getElementById('combatLog');
+        function addCombatMessage(text, color) {
+            if (!combatLogEl) return;
+            const div = document.createElement('div');
+            div.className = 'log-msg';
+            div.textContent = text;
+            div.style.color = color || '#cccccc';
+            combatLogEl.appendChild(div);
+            combatLogEl.scrollTop = combatLogEl.scrollHeight;
+            while (combatLogEl.children.length > 120) combatLogEl.removeChild(combatLogEl.firstChild);
+        }
+
+        // Stat tooltip
+        const statTooltipEl = document.getElementById('statTooltip');
+        function showStatTooltip(html, x, y) {
+            if (!statTooltipEl) return;
+            statTooltipEl.innerHTML = html;
+            statTooltipEl.style.left = (x + 14) + 'px';
+            statTooltipEl.style.top = (y + 14) + 'px';
+            statTooltipEl.style.display = 'block';
+        }
+        function hideStatTooltip() {
+            if (statTooltipEl) statTooltipEl.style.display = 'none';
+        }
+
         let selectedWeaponId = 'ar';
         let sidearmId = 'handgun';
+        let offHandId = ''; // off-hand weapon or 'shield' — only usable with 1H main weapon
         let activeSlot = 'main'; // 'main' or 'sidearm'
         const unlockedWeapons = {
             handgun: true,
@@ -568,6 +714,18 @@
         // Coins array
         const coins = [];
         const healingItems = [];
+
+        // Mining system
+        const mineralBlocks = [];
+        const resourcePickups = [];
+        const xpPickups = [];
+        const mineralBlockDefs = {
+            stone: { color: '#888', strokeColor: '#555', hp: 3, size: 36, drops: [['stone', 1, 3]], xpDrop: 2, weight: 55 },
+            coal:  { color: '#3d3d3d', strokeColor: '#222', hp: 4, size: 36, drops: [['coal', 1, 2]], xpDrop: 4, weight: 25 },
+            iron:  { color: '#b87040', strokeColor: '#7a4820', hp: 5, size: 36, drops: [['iron', 1, 1]], xpDrop: 8, weight: 14 },
+            gold:  { color: '#e8c020', strokeColor: '#b08000', hp: 6, size: 36, drops: [['gold', 1, 1]], xpDrop: 15, weight: 6 }
+        };
+        const resourceColors = { stone: '#aaaaaa', coal: '#555555', iron: '#cc7744', gold: '#ffd700' };
 
         // Noise system
         const noise = {
@@ -774,6 +932,84 @@
         let gameState = 'playing'; // 'playing', 'death', or 'extracted'
         let extractionTimer = 0;
         let isPaused = false;
+
+        // ── Database ──────────────────────────────────────────────
+        let _dbReady    = false;
+        let _hsPromptOpen = false; // true while the initials input is showing
+        let _pendingScore = 0;     // score at extraction time, shown in prompt
+        // Snapshot of the current run's stats, used when saving the highscore entry.
+        // Kept separate from the run-save queue so DB init can't clobber it.
+        let _hsRunStats = { kills: 0, coins: 0, levelId: 1 };
+        // Run record waiting to be written to DB once it's ready
+        let _queuedRun  = null;
+
+        // Score formula — no DB dependency, mirrors db.js calcScore
+        function _calcScore(kills, coins, levelId, extracted) {
+            return kills * 25 + coins * 10 + levelId * 100 + (extracted ? 500 : 0);
+        }
+
+        GameDB.init()
+            .then(() => {
+                _dbReady = true;
+                if (_queuedRun) {
+                    GameDB.saveRun(_queuedRun);
+                    _queuedRun = null;
+                }
+            })
+            .catch(e => console.warn('[DB] init failed, scores will not be saved:', e));
+
+        // ── Initials prompt wiring ────────────────────────────────
+        {
+            const prompt    = document.getElementById('hsPrompt');
+            const input     = document.getElementById('hsInitialsInput');
+            const submitBtn = document.getElementById('hsSubmitBtn');
+
+            function _submitInitials() {
+                if (!_hsPromptOpen) return;
+                const raw      = input.value.trim().toUpperCase();
+                const initials = (raw || 'AAA').replace(/[^A-Z]/g, 'A').padEnd(3, 'A').slice(0, 3);
+
+                // Snapshot stats now so async timing can't change them
+                const snap = { ..._hsRunStats };
+
+                function doSaveHighscore() {
+                    GameDB.saveHighscore({
+                        initials,
+                        score:   _pendingScore,
+                        kills:   snap.kills,
+                        coins:   snap.coins,
+                        levelId: snap.levelId
+                    });
+                }
+
+                if (_dbReady) {
+                    doSaveHighscore();
+                } else {
+                    // DB still initialising — poll until ready (max 10 s)
+                    const deadline = Date.now() + 10000;
+                    const poll = setInterval(() => {
+                        if (_dbReady)           { clearInterval(poll); doSaveHighscore(); }
+                        else if (Date.now() > deadline) { clearInterval(poll); }
+                    }, 100);
+                }
+
+                prompt.style.display = 'none';
+                _hsPromptOpen = false;
+            }
+
+            submitBtn.addEventListener('click', _submitInitials);
+
+            window.addEventListener('keydown', e => {
+                if (!_hsPromptOpen) return;
+                if (e.key === 'Enter')  { e.preventDefault(); _submitInitials(); }
+                if (e.key === 'Escape') {
+                    prompt.style.display = 'none';
+                    _hsPromptOpen = false;
+                }
+            }, true);
+
+            input.addEventListener('keydown', e => e.stopPropagation());
+        }
         let mapOpen = false;
         let levelSpawnPos = [3000, 2300];
         let difficulty = 1;
@@ -785,6 +1021,22 @@
         let enemiesKilled = 0;
         let runEnemiesKilled = 0;
         let runMoneyEarned = 0;
+
+        // XP / level system
+        let playerXP = 0;
+        let playerLevel = 1;
+        let xpToNextLevel = 100;
+        let levelUpBannerTimer = 0;
+
+        // Resource inventory
+        let resourceInventory = { stone: 0, coal: 0, iron: 0, gold: 0 };
+
+        // Wave system
+        let waveTimer = 0;
+        let waveInterval = 14400; // set properly in resetRunState
+        let waveNumber = 0;
+        let waveBannerTimer = 0;
+        let waveBannerText = '';
         
         // Upgrade system
         const upgrades = {
@@ -895,6 +1147,10 @@
             const querySkin = params.get('skin') || 'default';
             equippedSkinId = skinDefs[querySkin] ? querySkin : 'default';
 
+            // Load off-hand from localStorage
+            offHandId = localStorage.getItem('mh_offhand') || '';
+            shieldEquipped = (offHandId === 'shield');
+
             resetUpgradeLevels();
             const damageLevel = Number.parseInt(params.get('upgDamage') || '0', 10);
             const moveSpeedLevel = Number.parseInt(params.get('upgMoveSpeed') || '0', 10);
@@ -930,6 +1186,7 @@
             params.set('activeSkills', learnedSkills.active.join(','));
             params.set('level', String(currentLevel));
             params.set('skin', equippedSkinId);
+            params.set('runKills', String(runEnemiesKilled));
             return params.toString();
         }
 
@@ -1040,6 +1297,48 @@
                     }
                 } catch(e) {}
             }
+
+            // ── Save run to database & check for highscore ──
+            // Score is calculated locally so the prompt works even if the DB
+            // is still loading. The actual DB write is queued if not ready yet.
+            const _kills = runEnemiesKilled;
+            const _coins = Math.floor(runMoneyEarned);
+            _pendingScore = _calcScore(_kills, _coins, currentLevel, true);
+
+            // Save run to the runs table (queue if DB not ready yet)
+            const runRecord = {
+                characterName: localStorage.getItem('mh_playerName') || 'Unknown',
+                levelId:   currentLevel,
+                kills:     _kills,
+                coins:     _coins,
+                extracted: true
+            };
+            if (_dbReady) {
+                GameDB.saveRun(runRecord);
+            } else {
+                _queuedRun = runRecord;
+            }
+
+            // Snapshot stats for the highscore entry (safe from any async clobber)
+            _hsRunStats = { kills: _kills, coins: _coins, levelId: currentLevel };
+
+            // Show the initials prompt if this qualifies for the leaderboard.
+            // When the DB isn't ready we can't check, so we always prompt —
+            // the board is empty anyway on a fresh session.
+            const qualifies = _dbReady ? GameDB.isHighscore(_pendingScore) : true;
+            if (qualifies) {
+                setTimeout(() => {
+                    document.getElementById('hsFinalScore').textContent = _pendingScore.toLocaleString();
+                    document.getElementById('hsScoreBreakdown').textContent =
+                        `${_kills} kills × 25  +  ${_coins} coins × 10  +  level ${currentLevel} × 100  +  500 extraction`;
+                    const input = document.getElementById('hsInitialsInput');
+                    input.value = '';
+                    document.getElementById('hsPrompt').style.display = 'block';
+                    input.focus();
+                    _hsPromptOpen = true;
+                }, 1200);
+            }
+
             stopAmbientMusic();
             gameState = 'extracted';
             extractionTimer = 0;
@@ -1060,7 +1359,7 @@
                 gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
                 osc.start(); osc.stop(audioContext.currentTime + 0.5);
             }
-            if (extractionTimer >= 210) {
+            if (extractionTimer >= 210 && !_hsPromptOpen) {
                 window.location.href = `base.html?${buildBaseStateQuery()}`;
             }
         }
@@ -1481,6 +1780,7 @@
                         isFlame: weapon.id === 'flamethrower',
                         piercing: !!weapon.piercing,
                         pierceCount: weapon.piercing ? 1 : 0,
+                        aoeRadius: weapon.aoeRadius || 0,
                         trail: [],
                         trailMax: Math.max(bulletTrailMin, Math.min(bulletTrailMax, Math.round(weapon.bulletSpeed)))
                     });
@@ -1630,6 +1930,18 @@
             }
             if (e.key === '2' && gameState === 'playing' && !isPaused) {
                 if (activeSlot !== 'sidearm') swapWeaponSlot();
+            }
+            // Key [3] switches to off-hand weapon (if equipped, not shield, 1H main)
+            if (e.key === '3' && gameState === 'playing' && !isPaused) {
+                const mainIsOneHanded = !selectedWeaponId || !(weaponConfigs[selectedWeaponId]?.twoHanded);
+                if (mainIsOneHanded && offHandId && offHandId !== 'shield' && weaponConfigs[offHandId]) {
+                    // Swap main and off-hand weapons
+                    const tmp = selectedWeaponId;
+                    selectedWeaponId = offHandId;
+                    offHandId = tmp;
+                    activeSlot = 'main';
+                    applySelectedWeapon(true);
+                }
             }
             if (e.key.toLowerCase() === 'g' && gameState === 'playing' && !isPaused) {
                 throwGrenade();
@@ -1839,6 +2151,21 @@
                 if (enemy.health <= 0) {
                     killEnemy(i, true);
                 }
+            }
+
+            // Melee can also mine mineral blocks
+            for (let b = mineralBlocks.length - 1; b >= 0; b--) {
+                const blk = mineralBlocks[b];
+                const blkCX = blk.x + blk.width / 2;
+                const blkCY = blk.y + blk.height / 2;
+                const toBlkX = blkCX - playerCenterX;
+                const toBlkY = blkCY - playerCenterY;
+                const blkDist = Math.hypot(toBlkX, toBlkY);
+                if (blkDist > player.meleeRange) continue;
+                const dot = (toBlkX / (blkDist || 1)) * dirX + (toBlkY / (blkDist || 1)) * dirY;
+                if (dot < 0.2) continue;
+                damageMineralBlock(b, Math.ceil(player.meleeDamage * 0.3));
+                createHitEffect(blkCX, blkCY, '#ffeeaa');
             }
         }
         // Update player position
@@ -2188,9 +2515,9 @@
                 // Check collision with obstacles
                 let hitObstacle = false;
                 for (let obstacle of obstacles) {
-                    if (bullets[i].x > obstacle.x && 
+                    if (bullets[i].x > obstacle.x &&
                         bullets[i].x < obstacle.x + obstacle.width &&
-                        bullets[i].y > obstacle.y && 
+                        bullets[i].y > obstacle.y &&
                         bullets[i].y < obstacle.y + obstacle.height) {
                         hitObstacle = true;
                         // Create explosion on hit
@@ -2199,18 +2526,36 @@
                     }
                 }
 
-                // Check if bullet hit map boundaries or empty void
-                let hitWall = bullets[i].x < 0 || bullets[i].x > mapWidth ||
-                    bullets[i].y < 0 || bullets[i].y > mapHeight ||
-                    !isPointInWalkableArea(bullets[i].x, bullets[i].y);
+                // Check collision with mineral blocks
+                if (!hitObstacle) {
+                    for (let b = mineralBlocks.length - 1; b >= 0; b--) {
+                        const blk = mineralBlocks[b];
+                        if (bullets[i] && bullets[i].x > blk.x && bullets[i].x < blk.x + blk.width &&
+                            bullets[i].y > blk.y && bullets[i].y < blk.y + blk.height) {
+                            const dmg = bullets[i].isFlame ? 0.5 : (bullets[i].damage || 1);
+                            damageMineralBlock(b, dmg);
+                            createExplosion(bullets[i].x, bullets[i].y);
+                            if (bullets[i] && !bullets[i].piercing) {
+                                bullets.splice(i, 1);
+                            }
+                            hitObstacle = true;
+                            break;
+                        }
+                    }
+                }
 
-                if (hitWall) {
+                // Check if bullet hit map boundaries or empty void
+                let hitWall = bullets[i] && (bullets[i].x < 0 || bullets[i].x > mapWidth ||
+                    bullets[i].y < 0 || bullets[i].y > mapHeight ||
+                    !isPointInWalkableArea(bullets[i].x, bullets[i].y));
+
+                if (bullets[i] && hitWall) {
                     // Create explosion on wall hit
                     createExplosion(bullets[i].x, bullets[i].y);
                 }
 
                 // Remove bullets that go off map or hit obstacles
-                if (hitObstacle || hitWall) {
+                if (bullets[i] && (hitObstacle || hitWall)) {
                     bullets.splice(i, 1);
                 }
             }
@@ -2596,6 +2941,11 @@
 
             for (let obstacle of obstacles) {
                 if (rectsIntersect(x, y, width, height, obstacle.x, obstacle.y, obstacle.width, obstacle.height)) {
+                    return true;
+                }
+            }
+            for (let b of mineralBlocks) {
+                if (rectsIntersect(x, y, width, height, b.x, b.y, b.width, b.height)) {
                     return true;
                 }
             }
@@ -3095,9 +3445,18 @@
             if (creditedToPlayer) {
                 enemiesKilled++;
                 runEnemiesKilled++;
+                const killedName = typeDef ? typeDef.name : 'Enemy';
+                addCombatMessage(`${killedName} slain!`, '#88ff88');
                 // Adrenaline skill: speed boost after kill
                 if (learnedSkills.passive.includes('adrenaline')) adrenalineTimer = 180;
             }
+            // Drop XP
+            const isEliteKill = isEliteEnemy(enemy);
+            const isWaveEliteKill = !!enemy._waveElite;
+            const xpAmount = isWaveEliteKill ? (100 + Math.floor(Math.random() * 60))
+                           : isEliteKill     ? (40 + Math.floor(Math.random() * 30))
+                                             : (6 + Math.floor(Math.random() * 8));
+            dropXPAt(ex, ey, xpAmount, isEliteKill || isWaveEliteKill);
             // Death poof particles (faction-colored)
             const factionColors = { 0: '#8b4a00', 1: '#aaaaaa', 2: '#7a5030', 99: '#cc2200' };
             createDeathPoof(ex, ey, factionColors[enemy.faction] || '#ccbbaa');
@@ -3153,9 +3512,13 @@
             return isEliteEnemy(enemy) ? damage * 0.5 : damage;
         }
 
-        function applyDamageToEnemy(enemy, rawDamage) {
+        function applyDamageToEnemy(enemy, rawDamage, skipLog) {
             const amount = getEnemyDamageAmount(enemy, rawDamage);
             enemy.health -= amount;
+            if (!skipLog && amount > 0 && gameState === 'playing') {
+                const r = Math.round(amount * 10) / 10;
+                addCombatMessage(`Hit for ${r}`, '#ffaa44');
+            }
             return amount;
         }
 
@@ -3180,6 +3543,23 @@
             money = 0;
             
             recordRunToJournal(false);
+
+            // ── Save failed run to database ──
+            {
+                const deathRun = {
+                    characterName: localStorage.getItem('mh_playerName') || 'Unknown',
+                    levelId:   currentLevel,
+                    kills:     runEnemiesKilled,
+                    coins:     Math.floor(runMoneyEarned),
+                    extracted: false
+                };
+                if (_dbReady) {
+                    GameDB.saveRun(deathRun);
+                } else {
+                    _queuedRun = deathRun;
+                }
+            }
+
             stopAmbientMusic();
             gameState = 'death';
             deathTimer = 0;
@@ -3444,7 +3824,10 @@
                 player.invulnerable = true; player.invulnerableTime = 20;
                 return;
             }
-            const normalizedDamage = Math.max(1, Math.round(amount || 0));
+            // Physical shield (off-hand) reduces damage by 25%
+            let reducedAmount = amount;
+            if (shieldEquipped) reducedAmount = amount * 0.75;
+            const normalizedDamage = Math.max(1, Math.round(reducedAmount || 0));
             player.health -= normalizedDamage;
             player.health = Math.max(0, Math.floor(player.health));
             player.invulnerable = true;
@@ -3656,6 +4039,11 @@
 
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const enemy = enemies[i];
+                // Clean up enemies killed by AOE splash on a previous iteration
+                if (enemy.health <= 0) {
+                    killEnemy(i, true);
+                    continue;
+                }
                 const enemyIsElite = enemy.isElite === true;
                 const centerX = enemy.x + enemy.width / 2;
                 const centerY = enemy.y + enemy.height / 2;
@@ -4043,6 +4431,23 @@
                         const playerDistance = Math.hypot(bullets[j].x - playerCenterX, bullets[j].y - playerCenterY);
                         playHitSound(playerDistance);
                         if (!bullets[j].isFlame) createExplosion(bullets[j].x, bullets[j].y);
+
+                        // AOE splash: damage all other enemies within aoeRadius
+                        const aoe = bullets[j] ? (bullets[j].aoeRadius || 0) : 0;
+                        if (aoe > 0) {
+                            const bx = bullets[j].x, by = bullets[j].y;
+                            const splashDmg = (bullets[j].damage || 1) * 0.55;
+                            for (let k = enemies.length - 1; k >= 0; k--) {
+                                if (k === i) continue;
+                                const oe = enemies[k];
+                                const ocx = oe.x + oe.width / 2, ocy = oe.y + oe.height / 2;
+                                if (Math.hypot(bx - ocx, by - ocy) <= aoe) {
+                                    applyDamageToEnemy(oe, splashDmg, true);
+                                    oe.hitTimer = 8;
+                                    createHitEffect(bx, by, '#ffaa55');
+                                }
+                            }
+                        }
 
                         // Piercing bullet: don't remove until pierceCount depleted
                         if (bullets[j] && bullets[j].piercing && bullets[j].pierceCount > 0) {
@@ -4998,6 +5403,37 @@
             ctx.stroke();
         }
 
+        // Stat tooltip hover regions (screen coords)
+        const statHoverRegions = [
+            { x: 20, y: 50, w: 200, h: 20, key: 'hp' },
+            { x: 20, y: 20, w: 180, h: 22, key: 'money' }
+        ];
+
+        function updateStatTooltip() {
+            const mx = mousePosition.x, my = mousePosition.y;
+            for (const r of statHoverRegions) {
+                if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+                    let html = '';
+                    if (r.key === 'hp') {
+                        const spd = (player.speed * 100).toFixed(0);
+                        const dmg = (player.meleeDamage || 12).toFixed(1);
+                        const pick = (player.pickupRange || 40).toFixed(0);
+                        const dashCd = (player.maxDashCooldown / 60).toFixed(1);
+                        html = `<b>Health</b>: ${Math.floor(player.health)} / ${Math.floor(player.maxHealth)}<br>`
+                             + `<b>Speed</b>: ${spd} (affects move &amp; dash)<br>`
+                             + `<b>Melee dmg</b>: ${dmg}<br>`
+                             + `<b>Pickup range</b>: ${pick}px<br>`
+                             + `<b>Dash cooldown</b>: ${dashCd}s`;
+                    } else if (r.key === 'money') {
+                        html = `<b>Crumbs</b> — spent at the base<br>to unlock weapons, mods, &amp; skills.`;
+                    }
+                    showStatTooltip(html, mx, my);
+                    return;
+                }
+            }
+            hideStatTooltip();
+        }
+
         // Draw health bar
         function drawHealthBar() {
             const barWidth = 200;
@@ -5021,6 +5457,24 @@
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
             ctx.fillText(`HP: ${Math.floor(player.health)}/${Math.floor(player.maxHealth)}`, barX + 5, barY + barHeight / 2);
+
+            // Attack radius indicator — subtle ring around player showing AOE range
+            const wId = activeSlot === 'main' ? selectedWeaponId : sidearmId;
+            const wCfg = weaponConfigs[wId];
+            if (wCfg && wCfg.aoeRadius > 0) {
+                const px = player.x + player.width / 2 - camera.x;
+                const py = player.y + player.height / 2 - camera.y;
+                ctx.save();
+                ctx.globalAlpha = 0.18;
+                ctx.strokeStyle = '#ffcc55';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 6]);
+                ctx.beginPath();
+                ctx.arc(px, py, wCfg.aoeRadius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
         }
 
         // Draw dual-weapon HUD at bottom center
@@ -5032,43 +5486,68 @@
             const startX = canvas.width / 2 - totalW / 2;
             const startY = canvas.height - slotH - 14;
 
+            // Determine if off-hand slot should show
+            const mainCfg = weaponConfigs[selectedWeaponId];
+            const mainIsOneHanded = !selectedWeaponId || !(mainCfg && mainCfg.twoHanded);
+            const showOffHand = mainIsOneHanded && (offHandId || true);
+
             const slots = [
                 { slot: 'main', id: selectedWeaponId, label: '[1] MAIN' },
+                ...(showOffHand ? [{ slot: 'offhand', id: offHandId, label: 'OFF' }] : []),
                 { slot: 'sidearm', id: sidearmId, label: '[2] SIDE' }
             ];
 
+            const totalW2 = slotW * slots.length + gap * (slots.length - 1);
+            const startX2 = canvas.width / 2 - totalW2 / 2;
+
             for (let i = 0; i < slots.length; i++) {
                 const s = slots[i];
-                const sx = startX + i * (slotW + gap);
+                const sx = startX2 + i * (slotW + gap);
                 const sy = startY;
                 const isActive = activeSlot === s.slot;
-                const slotState = weaponSlotState[s.slot];
-                const wCfg = weaponConfigs[s.id] || weaponConfigs.handgun;
+                const isOffHand = s.slot === 'offhand';
+                const slotState = isOffHand ? null : weaponSlotState[s.slot];
+                const wCfg = isOffHand
+                    ? (s.id === 'shield' ? { name: 'Shield' } : (weaponConfigs[s.id] || null))
+                    : (weaponConfigs[s.id] || weaponConfigs.handgun);
 
-                ctx.fillStyle = isActive ? 'rgba(180,140,60,0.85)' : 'rgba(40,30,20,0.75)';
+                ctx.fillStyle = isActive ? 'rgba(180,140,60,0.85)' : (isOffHand ? 'rgba(30,40,50,0.75)' : 'rgba(40,30,20,0.75)');
                 ctx.fillRect(sx, sy, slotW, slotH);
-                ctx.strokeStyle = isActive ? '#e8c060' : '#665533';
+                ctx.strokeStyle = isActive ? '#e8c060' : (isOffHand ? '#4466aa' : '#665533');
                 ctx.lineWidth = isActive ? 2.5 : 1.5;
                 ctx.strokeRect(sx, sy, slotW, slotH);
 
-                const displayName = (s.slot === 'main' && !selectedWeaponId) ? 'NO WEAPON' : wCfg.name;
-                ctx.fillStyle = (s.slot === 'main' && !selectedWeaponId) ? '#666655' : (isActive ? '#fff8e0' : '#aaa890');
+                let displayName;
+                if (isOffHand) {
+                    displayName = s.id === 'shield' ? 'SHIELD' : (wCfg ? wCfg.name : 'EMPTY');
+                } else {
+                    displayName = (s.slot === 'main' && !selectedWeaponId) ? 'NO WEAPON' : (wCfg ? wCfg.name : '—');
+                }
+                ctx.fillStyle = (!wCfg && !isOffHand) ? '#666655' : (isActive ? '#fff8e0' : (isOffHand ? '#99bbdd' : '#aaa890'));
                 ctx.font = 'bold 13px Arial';
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'top';
                 ctx.fillText(displayName, sx + 6, sy + 5);
 
                 ctx.font = '11px Arial';
-                ctx.fillStyle = isActive ? '#ffe080' : '#888866';
+                ctx.fillStyle = isActive ? '#ffe080' : (isOffHand ? '#6688aa' : '#888866');
                 ctx.fillText(s.label, sx + 6, sy + 22);
 
-                // Ammo display
-                const ammoText = slotState.isReloading ? 'RELOAD...' : `${slotState.ammo}/${slotState.maxAmmo}`;
-                ctx.fillStyle = isActive ? '#ffe080' : '#888866';
-                ctx.textAlign = 'right';
-                ctx.font = 'bold 12px Arial';
-                ctx.textBaseline = 'bottom';
-                ctx.fillText(ammoText, sx + slotW - 5, sy + slotH - 5);
+                // Ammo display (only for weapon slots)
+                if (!isOffHand && slotState) {
+                    const ammoText = slotState.isReloading ? 'RELOAD...' : `${slotState.ammo}/${slotState.maxAmmo}`;
+                    ctx.fillStyle = isActive ? '#ffe080' : '#888866';
+                    ctx.textAlign = 'right';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText(ammoText, sx + slotW - 5, sy + slotH - 5);
+                } else if (isOffHand && s.id === 'shield') {
+                    ctx.fillStyle = '#4488cc';
+                    ctx.textAlign = 'right';
+                    ctx.font = '11px Arial';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText('-25% dmg', sx + slotW - 5, sy + slotH - 5);
+                }
             }
         }
 
@@ -5503,7 +5982,7 @@
             mouseButtons.left = false;
             screenShake.intensity = 0;
             screenShake.timer = 0;
-            difficulty = 1;
+            difficulty = 5;
             difficultyProgress = 0;
             enemies.length = 0;
             deathMoneyPenalty = 0;
@@ -5530,7 +6009,22 @@
             activeRunEvent = null;
             runEventTimer = 0;
             runEventCooldown = RUN_EVENT_MIN_INTERVAL;
+            // Mining / XP / wave reset
+            mineralBlocks.length = 0;
+            resourcePickups.length = 0;
+            xpPickups.length = 0;
+            playerXP = 0;
+            playerLevel = 1;
+            xpToNextLevel = 100;
+            levelUpBannerTimer = 0;
+            resourceInventory = { stone: 0, coal: 0, iron: 0, gold: 0 };
+            waveTimer = 0;
+            waveInterval = Math.floor(14400 + Math.random() * 7200);
+            waveNumber = 0;
+            waveBannerTimer = 0;
+            waveBannerText = '';
             spawnExtractDoor();
+            generateMineralBlocks();
         }
 
         // --- Mid-run event system ---
@@ -6321,6 +6815,281 @@
             }
         }
 
+        // ===== MINING / XP / WAVE SYSTEM =====
+
+        function generateMineralBlocks() {
+            const typeEntries = Object.entries(mineralBlockDefs);
+            const totalWeight = typeEntries.reduce((s, [, d]) => s + d.weight, 0);
+            const count = 45 + Math.floor(Math.random() * 20);
+            for (let attempt = 0; attempt < count * 10 && mineralBlocks.length < count; attempt++) {
+                const pos = getRandomWalkablePosition(36, 36);
+                if (!pos) continue;
+                const dx = pos.x - levelSpawnPos[0], dy = pos.y - levelSpawnPos[1];
+                if (Math.hypot(dx, dy) < 350) continue;
+                let overlap = false;
+                for (const obs of obstacles) {
+                    if (pos.x < obs.x + obs.width + 12 && pos.x + 36 > obs.x - 12 &&
+                        pos.y < obs.y + obs.height + 12 && pos.y + 36 > obs.y - 12) { overlap = true; break; }
+                }
+                if (overlap) continue;
+                for (const b of mineralBlocks) {
+                    if (Math.hypot(pos.x - b.x, pos.y - b.y) < 70) { overlap = true; break; }
+                }
+                if (overlap) continue;
+                let r = Math.random() * totalWeight;
+                let chosenType = typeEntries[0][0];
+                for (const [type, def] of typeEntries) { r -= def.weight; if (r <= 0) { chosenType = type; break; } }
+                const def = mineralBlockDefs[chosenType];
+                mineralBlocks.push({ x: pos.x, y: pos.y, width: def.size, height: def.size, type: chosenType, hp: def.hp, maxHp: def.hp, hitTimer: 0 });
+            }
+        }
+
+        function damageMineralBlock(blockIndex, damage) {
+            const block = mineralBlocks[blockIndex];
+            if (!block) return;
+            block.hp -= damage;
+            block.hitTimer = 8;
+            if (block.hp <= 0) {
+                const def = mineralBlockDefs[block.type];
+                const cx = block.x + block.width / 2, cy = block.y + block.height / 2;
+                for (const [resType, minAmt, maxAmt] of def.drops) {
+                    const count = minAmt + Math.floor(Math.random() * (maxAmt - minAmt + 1));
+                    for (let k = 0; k < count; k++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const dist = 12 + Math.random() * 22;
+                        resourcePickups.push({ x: cx + Math.cos(angle) * dist, y: cy + Math.sin(angle) * dist, type: resType, size: 5 });
+                    }
+                }
+                dropXPAt(cx, cy, def.xpDrop, false);
+                createDeathPoof(cx, cy, mineralBlockDefs[block.type].strokeColor);
+                mineralBlocks.splice(blockIndex, 1);
+            }
+        }
+
+        function dropXPAt(x, y, totalAmount, isElite) {
+            const orbCount = isElite ? Math.max(3, Math.floor(totalAmount / 15)) : Math.max(1, Math.floor(totalAmount / 6));
+            const orbValue = totalAmount / Math.max(1, orbCount);
+            for (let k = 0; k < orbCount; k++) {
+                const angle = (k / orbCount) * Math.PI * 2 + Math.random() * 0.5;
+                const dist = (isElite ? 18 : 8) + Math.random() * 22;
+                xpPickups.push({ x: x + Math.cos(angle) * dist, y: y + Math.sin(angle) * dist, amount: orbValue, size: isElite ? 8 : 5 });
+            }
+        }
+
+        function updateResourcePickups() {
+            const pickupRadius = player.pickupRange || 40;
+            const pcx = player.x + player.width / 2, pcy = player.y + player.height / 2;
+            for (let i = resourcePickups.length - 1; i >= 0; i--) {
+                const p = resourcePickups[i];
+                const dx = pcx - p.x, dy = pcy - p.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < pickupRadius && dist > 0) {
+                    p.x += (dx / dist) * 5;
+                    p.y += (dy / dist) * 5;
+                    if (dist < 10) {
+                        resourceInventory[p.type] = (resourceInventory[p.type] || 0) + 1;
+                        playCoinPickupSound();
+                        resourcePickups.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        function updateXPPickups() {
+            const pickupRadius = player.pickupRange || 40;
+            const pcx = player.x + player.width / 2, pcy = player.y + player.height / 2;
+            for (let i = xpPickups.length - 1; i >= 0; i--) {
+                const p = xpPickups[i];
+                const dx = pcx - p.x, dy = pcy - p.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < pickupRadius && dist > 0) {
+                    p.x += (dx / dist) * 6;
+                    p.y += (dy / dist) * 6;
+                    if (dist < 10) {
+                        playerXP += p.amount;
+                        xpPickups.splice(i, 1);
+                        while (playerXP >= xpToNextLevel) {
+                            playerXP -= xpToNextLevel;
+                            playerLevel++;
+                            xpToNextLevel = Math.ceil(xpToNextLevel * 1.33);
+                            levelUpBannerTimer = 210;
+                        }
+                    }
+                }
+            }
+        }
+
+        function updateWave() {
+            if (waveBannerTimer > 0) waveBannerTimer--;
+            if (levelUpBannerTimer > 0) levelUpBannerTimer--;
+            waveTimer++;
+            if (waveTimer >= waveInterval) {
+                waveTimer = 0;
+                waveInterval = Math.floor(14400 + Math.random() * 7200);
+                waveNumber++;
+                triggerWave();
+            }
+        }
+
+        function triggerWave() {
+            waveBannerText = `WAVE ${waveNumber} INCOMING!`;
+            waveBannerTimer = 300;
+            const available = getAvailableEnemyTypes();
+            if (available.length === 0) return;
+            const normalCount = 8 + waveNumber * 3;
+            for (let i = 0; i < normalCount; i++) {
+                const [typeId, def] = available[Math.floor(Math.random() * available.length)];
+                const size = Math.round(36 * (def.scale || 1));
+                const spawn = getSpawnPointOffscreen(size, size);
+                if (!def.flying && (!isRectInWalkableArea(spawn.x, spawn.y, size, size))) continue;
+                const e = spawnEnemyOfType(typeId, spawn.x, spawn.y);
+                if (e) enemies.push(e);
+            }
+            const eliteTypes = ['eliteFlame', 'eliteMinigun', 'eliteSniper'];
+            const eliteCount = 1 + Math.floor(waveNumber / 2);
+            for (let i = 0; i < eliteCount; i++) {
+                const eliteId = eliteTypes[Math.floor(Math.random() * eliteTypes.length)];
+                const spawn = getSpawnPointOffscreen(46, 46);
+                const elite = spawnEnemyOfType(eliteId, spawn.x, spawn.y);
+                if (elite) { elite._waveElite = true; enemies.push(elite); }
+            }
+        }
+
+        function drawMineralBlocks() {
+            for (let b = mineralBlocks.length - 1; b >= 0; b--) {
+                const blk = mineralBlocks[b];
+                const def = mineralBlockDefs[blk.type];
+                const bx = blk.x - camera.x, by = blk.y - camera.y;
+                if (bx + blk.width < 0 || bx > canvas.width || by + blk.height < 0 || by > canvas.height) {
+                    if (blk.hitTimer > 0) blk.hitTimer--;
+                    continue;
+                }
+                const flash = blk.hitTimer > 0 && blk.hitTimer % 2 === 0;
+                ctx.fillStyle = flash ? '#ffffff' : def.color;
+                ctx.beginPath();
+                ctx.rect(bx + 3, by + 3, blk.width - 6, blk.height - 6);
+                ctx.fill();
+                // Rock texture dots
+                if (!flash) {
+                    ctx.fillStyle = def.strokeColor;
+                    ctx.beginPath(); ctx.arc(bx + 10, by + 10, 2, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(bx + 22, by + 20, 2.5, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(bx + 14, by + 25, 1.5, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.strokeStyle = flash ? '#ffffff' : def.strokeColor;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(bx + 3, by + 3, blk.width - 6, blk.height - 6);
+                // HP bar (only if damaged)
+                if (blk.hp < blk.maxHp) {
+                    const barW = blk.width - 6;
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(bx + 3, by - 7, barW, 4);
+                    ctx.fillStyle = '#66ff44';
+                    ctx.fillRect(bx + 3, by - 7, barW * (blk.hp / blk.maxHp), 4);
+                }
+                if (blk.hitTimer > 0) blk.hitTimer--;
+            }
+        }
+
+        function drawResourcePickups() {
+            for (const p of resourcePickups) {
+                const px = p.x - camera.x, py = p.y - camera.y;
+                ctx.save();
+                ctx.translate(px, py);
+                ctx.rotate(Math.PI / 4);
+                ctx.fillStyle = resourceColors[p.type] || '#aaa';
+                ctx.fillRect(-p.size, -p.size, p.size * 2, p.size * 2);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 0.8;
+                ctx.strokeRect(-p.size, -p.size, p.size * 2, p.size * 2);
+                ctx.restore();
+            }
+        }
+
+        function drawXPPickups() {
+            for (const p of xpPickups) {
+                const px = p.x - camera.x, py = p.y - camera.y;
+                ctx.fillStyle = '#9955ff';
+                ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#cc88ff';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+
+        function drawXPBar() {
+            const barW = 260, barH = 12;
+            const barX = canvas.width / 2 - barW / 2, barY = 48;
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(barX, barY, barW, barH);
+            const fillW = Math.min(1, playerXP / xpToNextLevel) * barW;
+            ctx.fillStyle = '#7733ee';
+            ctx.fillRect(barX, barY, fillW, barH);
+            ctx.strokeStyle = '#aa66ff';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(barX, barY, barW, barH);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 9px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`LVL ${playerLevel}  ·  ${Math.floor(playerXP)} / ${xpToNextLevel} XP`, canvas.width / 2, barY + barH / 2);
+        }
+
+        function drawResourceHUD() {
+            const types = ['stone', 'coal', 'iron', 'gold'];
+            let y = canvas.height - 120;
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for (const t of types) {
+                const val = resourceInventory[t] || 0;
+                if (val === 0) continue;
+                ctx.fillStyle = resourceColors[t];
+                // Diamond icon
+                ctx.save();
+                ctx.translate(canvas.width - 90, y);
+                ctx.rotate(Math.PI / 4);
+                ctx.fillRect(-4, -4, 8, 8);
+                ctx.restore();
+                ctx.fillStyle = '#eeeeee';
+                ctx.fillText(`${val} ${t}`, canvas.width - 10, y);
+                y += 18;
+            }
+            // Wave countdown
+            const secsToWave = Math.ceil((waveInterval - waveTimer) / 60);
+            ctx.fillStyle = waveNumber === 0 ? '#ffaa44' : '#ff6644';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`WAVE ${waveNumber + 1} in ${Math.floor(secsToWave / 60)}:${String(secsToWave % 60).padStart(2, '0')}`, canvas.width - 10, 72);
+        }
+
+        function drawWaveLevelBanners() {
+            if (waveBannerTimer <= 0 && levelUpBannerTimer <= 0) return;
+            ctx.save();
+            if (waveBannerTimer > 0) {
+                const t = waveBannerTimer / 300;
+                const alpha = Math.min(1, t * 5) * Math.min(1, (1 - t) * 2 + 0.2);
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = '#ff3333';
+                ctx.font = 'bold 36px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(waveBannerText, canvas.width / 2, canvas.height / 2 - 70);
+            }
+            if (levelUpBannerTimer > 0) {
+                const t = levelUpBannerTimer / 210;
+                const alpha = Math.min(1, t * 5) * Math.min(1, (1 - t) * 2 + 0.2);
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = '#ffdd00';
+                ctx.font = 'bold 30px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`LEVEL UP!  LVL ${playerLevel}`, canvas.width / 2, canvas.height / 2 - 20);
+            }
+            ctx.restore();
+        }
+
         // Game loop
         function gameLoop() {
             gameTime++;
@@ -6371,9 +7140,13 @@
                     updateGrenades();
                     updateExtractDoor();
                     updateRunEvent();
+                    updateResourcePickups();
+                    updateXPPickups();
+                    updateWave();
                 }
-                
+
                 drawEnvHazardOverlays();
+                drawMineralBlocks();
                 drawPlayer();
                 drawBullets();
                 drawEnemyBullets();
@@ -6381,6 +7154,8 @@
                 drawParticles();
                 drawCoins();
                 drawHealingItems();
+                drawResourcePickups();
+                drawXPPickups();
                 drawGrenades();
                 drawEnemies();
                 drawExtractDoor();
@@ -6389,15 +7164,19 @@
                 drawObstacles();
 
                 ctx.restore();
-                
+
                 drawDifficultyBar();
+                drawXPBar();
                 drawMoneyCounter();
                 drawHealthBar();
                 drawWeaponHUD();
                 drawGrenadeHUD();
                 drawSkillHUD();
+                updateStatTooltip();
                 drawBurrowArrow();
                 drawRunEventBanner();
+                drawResourceHUD();
+                drawWaveLevelBanners();
 
                 // Moth blind overlay
                 if (playerBlindTimer > 0) {

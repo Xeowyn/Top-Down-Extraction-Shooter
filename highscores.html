@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mousehunt: Extraction — Highscores</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            background: #0a0a0a;
+            color: #ffffff;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            font-size: 48px;
+            font-weight: 700;
+            color: #00ff00;
+            letter-spacing: 4px;
+            margin-bottom: 8px;
+            text-shadow: 0 0 20px #00ff0066;
+        }
+
+        .subtitle {
+            color: #555;
+            font-size: 13px;
+            letter-spacing: 2px;
+            margin-bottom: 40px;
+        }
+
+        /* ── Highscores table ── */
+        .board-wrap {
+            width: 100%;
+            max-width: 640px;
+            margin-bottom: 48px;
+        }
+
+        .board-wrap h2 {
+            font-size: 14px;
+            letter-spacing: 3px;
+            color: #00ff00;
+            border-bottom: 1px solid #1a3a1a;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 15px;
+        }
+
+        thead th {
+            color: #555;
+            font-size: 11px;
+            letter-spacing: 2px;
+            text-align: left;
+            padding: 0 8px 8px 8px;
+            border-bottom: 1px solid #1a1a1a;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #111;
+            transition: background 0.1s;
+        }
+
+        tbody tr:hover { background: #0d1a0d; }
+
+        tbody td {
+            padding: 10px 8px;
+            color: #cccccc;
+        }
+
+        .rank { color: #444; width: 36px; }
+        .rank.gold   { color: #ffd700; }
+        .rank.silver { color: #aaaacc; }
+        .rank.bronze { color: #cc8844; }
+
+        .initials {
+            font-size: 22px;
+            font-weight: 700;
+            color: #00ff00;
+            letter-spacing: 3px;
+            width: 70px;
+        }
+
+        .score-val {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .level-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border: 1px solid #333;
+            font-size: 11px;
+            color: #888;
+            letter-spacing: 1px;
+        }
+
+        .empty-row td {
+            text-align: center;
+            color: #333;
+            padding: 40px;
+            font-size: 13px;
+            letter-spacing: 2px;
+        }
+
+        /* ── Recent runs table ── */
+        .runs-wrap {
+            width: 100%;
+            max-width: 760px;
+            margin-bottom: 48px;
+        }
+
+        .runs-wrap h2 {
+            font-size: 14px;
+            letter-spacing: 3px;
+            color: #44aaff;
+            border-bottom: 1px solid #1a1a3a;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+        }
+
+        .result-win  { color: #44ff88; }
+        .result-loss { color: #ff4444; }
+
+        /* ── Career stats ── */
+        .stats-wrap {
+            width: 100%;
+            max-width: 640px;
+            margin-bottom: 48px;
+        }
+
+        .stats-wrap h2 {
+            font-size: 14px;
+            letter-spacing: 3px;
+            color: #ffcc44;
+            border-bottom: 1px solid #3a3a1a;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .stat-card {
+            border: 1px solid #222;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-card .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffcc44;
+        }
+
+        .stat-card .stat-label {
+            font-size: 11px;
+            color: #555;
+            letter-spacing: 2px;
+            margin-top: 4px;
+        }
+
+        /* ── Back button ── */
+        .back-btn {
+            border: 2px solid #444;
+            background: transparent;
+            color: #888;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            letter-spacing: 2px;
+            padding: 10px 32px;
+            cursor: pointer;
+            transition: color 0.2s, border-color 0.2s;
+            margin-bottom: 40px;
+        }
+
+        .back-btn:hover {
+            color: #00ff00;
+            border-color: #00ff00;
+        }
+
+        .no-db {
+            color: #555;
+            font-size: 14px;
+            letter-spacing: 2px;
+            margin: 80px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>HIGHSCORES</h1>
+    <div class="subtitle">MOUSEHUNT: EXTRACTION</div>
+
+    <div id="content">
+        <div class="no-db">LOADING DATABASE...</div>
+    </div>
+
+    <button class="back-btn" onclick="window.location.href='index.html'">BACK TO MENU</button>
+
+    <script src="https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/sql-wasm.js"></script>
+    <script src="db.js"></script>
+    <script>
+        const LEVEL_NAMES = { 1: 'The House', 2: 'Basement', 3: 'Attic', 4: 'The Yard' };
+
+        async function render() {
+            const content = document.getElementById('content');
+            try {
+                await GameDB.init();
+            } catch (e) {
+                content.innerHTML = `<div class="no-db">Could not load database.<br><small>${e.message}</small></div>`;
+                return;
+            }
+
+            const scores  = GameDB.getHighscores();
+            const runs    = GameDB.getRunHistory(15);
+            const career  = GameDB.getCareerStats();
+
+            content.innerHTML = buildHighscoresHTML(scores)
+                               + buildCareerHTML(career)
+                               + buildRunsHTML(runs);
+        }
+
+        function buildHighscoresHTML(scores) {
+            const rankClass = i => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+            const rows = scores.length
+                ? scores.map((s, i) => `
+                    <tr>
+                        <td class="rank ${rankClass(i)}">#${i + 1}</td>
+                        <td class="initials">${s.initials}</td>
+                        <td><span class="score-val">${s.score.toLocaleString()}</span></td>
+                        <td>${s.kills} kills</td>
+                        <td>${s.coins} coins</td>
+                        <td><span class="level-badge">${LEVEL_NAMES[s.level_id] || 'Level ' + s.level_id}</span></td>
+                        <td style="color:#333; font-size:11px">${s.achieved_at ? s.achieved_at.slice(0, 10) : ''}</td>
+                    </tr>`).join('')
+                : `<tr class="empty-row"><td colspan="7">— NO SCORES YET —<br><small style="color:#222">Extract from a level to earn your spot</small></td></tr>`;
+
+            return `
+                <div class="board-wrap">
+                    <h2>TOP 10 EXTRACTIONS</h2>
+                    <table>
+                        <thead><tr>
+                            <th>#</th><th>NAME</th><th>SCORE</th>
+                            <th>KILLS</th><th>COINS</th><th>LEVEL</th><th>DATE</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`;
+        }
+
+        function buildCareerHTML(c) {
+            if (!c.total_runs) return '';
+            return `
+                <div class="stats-wrap">
+                    <h2>CAREER STATS</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value">${c.total_runs ?? 0}</div>
+                            <div class="stat-label">TOTAL RUNS</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${c.extractions ?? 0}</div>
+                            <div class="stat-label">EXTRACTIONS</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${c.total_kills ?? 0}</div>
+                            <div class="stat-label">TOTAL KILLS</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${(c.total_coins ?? 0).toLocaleString()}</div>
+                            <div class="stat-label">TOTAL COINS</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${(c.best_score ?? 0).toLocaleString()}</div>
+                            <div class="stat-label">BEST SCORE</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${Math.round(c.avg_score ?? 0).toLocaleString()}</div>
+                            <div class="stat-label">AVG SCORE</div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function buildRunsHTML(runs) {
+            if (!runs.length) return '';
+            const rows = runs.map(r => {
+                const result = r.extracted
+                    ? `<span class="result-win">EXTRACTED</span>`
+                    : `<span class="result-loss">DIED</span>`;
+                return `<tr>
+                    <td>${r.character_name}</td>
+                    <td>${result}</td>
+                    <td>${LEVEL_NAMES[r.level_id] || 'Level ' + r.level_id}</td>
+                    <td>${r.score.toLocaleString()}</td>
+                    <td>${r.kills} kills · ${r.coins} coins</td>
+                    <td style="color:#333; font-size:11px">${r.played_at ? r.played_at.slice(0, 16).replace('T', ' ') : ''}</td>
+                </tr>`;
+            }).join('');
+
+            return `
+                <div class="runs-wrap">
+                    <h2>RECENT RUNS</h2>
+                    <table>
+                        <thead><tr>
+                            <th>CHARACTER</th><th>RESULT</th><th>LEVEL</th>
+                            <th>SCORE</th><th>STATS</th><th>TIME</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`;
+        }
+
+        render();
+    </script>
+</body>
+</html>

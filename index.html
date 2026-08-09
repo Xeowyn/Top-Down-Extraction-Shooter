@@ -62,6 +62,50 @@
             font-size: 16px;
             color: #aaaaaa;
         }
+
+        .name-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .name-label {
+            font-size: 14px;
+            color: #888;
+            letter-spacing: 1px;
+        }
+
+        .name-input {
+            background: #111;
+            border: 1px solid #444;
+            color: #00ff00;
+            font-size: 16px;
+            font-family: 'Courier New', monospace;
+            padding: 6px 12px;
+            width: 200px;
+            outline: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .name-input:focus {
+            border-color: #00ff00;
+        }
+
+        .scores-link {
+            display: inline-block;
+            margin-top: 14px;
+            font-size: 13px;
+            color: #555;
+            cursor: pointer;
+            letter-spacing: 1px;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .scores-link:hover { color: #00ff00; }
     </style>
 </head>
 <body>
@@ -72,22 +116,44 @@
             WASD move · Left Click shoot · Right Click melee · Space dash<br>
             Q / Scroll swap weapons · G throw grenade · E interact · R reload · ESC pause
         </div>
+        <div class="name-row">
+            <span class="name-label">MOUSE NAME</span>
+            <input id="playerNameInput" class="name-input" maxlength="16"
+                   placeholder="UNNAMED" autocomplete="off" spellcheck="false">
+        </div>
         <button class="play-button" id="playButton">PLAY</button>
         <div class="hint">Press Space or click Play to enter the base</div>
+        <a class="scores-link" href="highscores.html">VIEW HIGHSCORES</a>
     </div>
 
     <script>
-        const playButton = document.getElementById('playButton');
+        const playButton  = document.getElementById('playButton');
+        const nameInput   = document.getElementById('playerNameInput');
+
+        // Restore previously saved name
+        nameInput.value = localStorage.getItem('mh_playerName') || '';
+
+        // Save name whenever it changes
+        nameInput.addEventListener('input', () => {
+            localStorage.setItem('mh_playerName', nameInput.value.trim() || 'Unknown');
+        });
 
         function goToBase() {
+            // Ensure a name is saved before leaving
+            const name = nameInput.value.trim() || 'Unknown';
+            localStorage.setItem('mh_playerName', name);
             window.location.href = 'base.html';
         }
 
         playButton.addEventListener('click', goToBase);
 
         window.addEventListener('keydown', (event) => {
-            if (event.code === 'Space') {
+            // Don't intercept Space while typing in the name field
+            if (event.code === 'Space' && document.activeElement !== nameInput) {
                 event.preventDefault();
+                goToBase();
+            }
+            if (event.code === 'Enter' && document.activeElement === nameInput) {
                 goToBase();
             }
         });

@@ -25,10 +25,137 @@
             height: 100%;
             cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='6'/%3E%3Cpath d='M12 2v4M12 18v4M2 12h4M18 12h4'/%3E%3C/g%3E%3C/svg%3E") 12 12, crosshair;
         }
+
+        .inv-window {
+            position: fixed;
+            background: rgba(8,8,14,0.93);
+            border: 1px solid #444;
+            color: #ddd;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            padding: 8px;
+            user-select: none;
+            z-index: 200;
+        }
+        .inv-window h3 {
+            color: #ffcc66;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 4px;
+        }
+        .inv-slot {
+            display: inline-block;
+            width: 64px;
+            height: 64px;
+            border: 1px solid #555;
+            background: rgba(20,20,30,0.8);
+            margin: 3px;
+            vertical-align: top;
+            cursor: grab;
+            position: relative;
+            text-align: center;
+            font-size: 10px;
+            overflow: hidden;
+        }
+        .inv-slot.empty {
+            border-color: #333;
+            background: rgba(10,10,15,0.6);
+            cursor: default;
+        }
+        .inv-slot.equipped-slot {
+            border-color: #88cc66;
+        }
+        .inv-slot.drop-target {
+            border-color: #ffcc00;
+            background: rgba(80,70,0,0.5);
+        }
+        .inv-slot .slot-label {
+            position: absolute;
+            top: 2px; left: 0; right: 0;
+            font-size: 9px;
+            color: #aaa;
+            text-align: center;
+        }
+        .inv-slot .slot-name {
+            position: absolute;
+            bottom: 2px; left: 0; right: 0;
+            font-size: 9px;
+            font-weight: bold;
+            color: #fff;
+            text-align: center;
+        }
+        .inv-slot .slot-icon {
+            font-size: 24px;
+            line-height: 64px;
+        }
+        .inv-slot[draggable="true"]:active { cursor: grabbing; }
+        .slot-row { margin-bottom: 2px; }
+        .slot-row-label { font-size: 10px; color: #aaa; margin: 4px 0 2px 4px; }
+        .mat-bar { margin-top: 6px; color: #aaa; font-size: 11px; padding: 2px 4px; }
+        .mat-bar span { color: #ffcc66; font-weight: bold; }
+        #btnToggleInv {
+            position: fixed;
+            bottom: 160px;
+            right: 12px;
+            background: rgba(10,10,20,0.9);
+            border: 1px solid #555;
+            color: #ccc;
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 201;
+        }
+        #btnToggleInv:hover { border-color: #ffcc66; color: #ffcc66; }
+
+        #btnHighscores {
+            position: fixed;
+            bottom: 12px;
+            left: 12px;
+            background: rgba(10,10,20,0.9);
+            border: 1px solid #555;
+            color: #ccc;
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 201;
+            font-family: Arial, sans-serif;
+        }
+        #btnHighscores:hover { border-color: #00ff00; color: #00ff00; }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
+
+    <!-- Equipment Window (left side) -->
+    <div class="inv-window" id="equipWindow" style="left:12px; bottom:130px; width:220px;">
+        <h3>Equipped Loadout</h3>
+        <div class="slot-row-label">Main Weapon</div>
+        <div class="slot-row">
+            <div class="inv-slot equipped-slot" id="slot-main" data-slot="main"></div>
+            <div class="inv-slot equipped-slot" id="slot-offhand" data-slot="offhand"></div>
+        </div>
+        <div class="slot-row-label">Sidearm</div>
+        <div class="slot-row">
+            <div class="inv-slot equipped-slot" id="slot-sidearm" data-slot="sidearm"></div>
+        </div>
+        <div class="slot-row-label">Mods (Main)</div>
+        <div class="slot-row" id="modSlotRow"></div>
+        <div class="slot-row-label">Grenades</div>
+        <div class="slot-row" id="grenadeSlotRow"></div>
+    </div>
+
+    <!-- Inventory Window (right side) -->
+    <div class="inv-window" id="invWindow" style="right:12px; bottom:130px; width:260px; display:none;">
+        <h3>Inventory — Weapons</h3>
+        <div id="invWeaponSlots"></div>
+        <div class="mat-bar">Scraps: <span id="matScraps">0</span> &nbsp; Parts: <span id="matParts">0</span></div>
+        <div class="mat-bar" style="margin-top:2px;">Blueprints: <span id="matBlueprints" style="color:#88ffcc;">none</span></div>
+    </div>
+    <button id="btnToggleInv">INVENTORY [I]</button>
+    <button id="btnHighscores" onclick="window.location.href='highscores.html'">HIGHSCORES</button>
 
     <script>
         // Canvas setup
@@ -337,28 +464,34 @@
                 });
             }
 
-            // Skill stations — center area (passive left-col, active right-col)
+            // Skill stations — center grid (4 cols × 3 rows passive, 4 cols × 1 row active)
             skillStations.length = 0;
-            const skW = 110, skH = 38, skGap = 6;
-            const skCenterX = baseConfig.x + baseConfig.width / 2;
-            const skY = baseConfig.y + baseConfig.height / 2 + 40;
-            // Passive skills (left column)
+            const skW = 108, skH = 38, skGap = 6;
+            const skCols = 4;
+            const skTotalW = skCols * skW + (skCols - 1) * skGap;
+            const skStartX = baseConfig.x + baseConfig.width / 2 - skTotalW / 2;
+            // Passives: 4 cols × 3 rows, centered vertically in lower-center
+            const skPassiveStartY = baseConfig.y + Math.round(baseConfig.height * 0.35);
             for (let i = 0; i < passiveSkillIds.length; i++) {
+                const col = i % skCols;
+                const row = Math.floor(i / skCols);
                 skillStations.push({
                     id: passiveSkillIds[i],
                     type: 'passive',
-                    x: skCenterX - skW - 10,
-                    y: skY + i * (skH + skGap),
+                    x: skStartX + col * (skW + skGap),
+                    y: skPassiveStartY + row * (skH + skGap),
                     width: skW, height: skH
                 });
             }
-            // Active skills (right column)
+            // Active skills: 4 cols × 1 row, below passives
+            const passiveRows = Math.ceil(passiveSkillIds.length / skCols);
+            const skActiveStartY = skPassiveStartY + passiveRows * (skH + skGap) + 18;
             for (let i = 0; i < activeSkillIds.length; i++) {
                 skillStations.push({
                     id: activeSkillIds[i],
                     type: 'active',
-                    x: skCenterX + 10,
-                    y: skY + i * (skH + skGap),
+                    x: skStartX + i * (skW + skGap),
+                    y: skActiveStartY,
                     width: skW, height: skH
                 });
             }
@@ -2771,31 +2904,42 @@
                 if (sideRow) ctx.fillText('SIDEARMS', sideRow.x - camera.x, sideRow.y - camera.y - 2);
             }
 
-            for (let station of weaponStations) {
-                const unlocked = isWeaponUnlocked(station.id);
-                const isSelected = unlocked && (
-                    (station.row === 'main' && station.id === selectedWeaponId) ||
-                    (station.row === 'sidearm' && station.id === sidearmId)
-                );
-                ctx.fillStyle = unlocked ? (isSelected ? '#4a3a10' : '#2a2a2a') : '#2a2222';
-                ctx.fillRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
-                ctx.strokeStyle = unlocked ? (isSelected ? '#e8c060' : '#777777') : '#aa6666';
-                ctx.lineWidth = isSelected ? 2.5 : 1.5;
-                ctx.strokeRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
-                ctx.fillStyle = unlocked ? (isSelected ? '#ffe080' : '#dddddd') : '#ff9999';
-                ctx.font = isSelected ? 'bold 12px Arial' : '12px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(
-                    unlocked ? weaponConfigs[station.id].name : 'LOCKED',
-                    station.x - camera.x + station.width / 2,
-                    station.y - camera.y + station.height / 2
-                );
-                if (!unlocked) {
-                    ctx.fillStyle = '#aa8844';
-                    ctx.font = '9px Arial';
+            { // Weapon stations with blueprint/craft/upgrade display
+                const _bp = loadBlueprints();
+                const _m  = loadMaterials();
+                const _wl = loadWeaponLevels();
+                for (let station of weaponStations) {
+                    const unlocked = isWeaponUnlocked(station.id);
+                    const hasBp = _bp.includes(station.id);
+                    const cost = weaponCraftCost[station.id];
+                    const canCraft = !unlocked && hasBp && _m.scraps >= cost.scraps && _m.parts >= cost.parts;
+                    const isSelected = unlocked && (
+                        (station.row === 'main' && station.id === selectedWeaponId) ||
+                        (station.row === 'sidearm' && station.id === sidearmId)
+                    );
+                    const lvl = _wl[station.id] || 0;
+                    ctx.fillStyle = unlocked ? (isSelected ? '#4a3a10' : '#2a2a2a') : (hasBp ? '#1a2a1a' : '#2a2222');
+                    ctx.fillRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                    ctx.strokeStyle = unlocked ? (isSelected ? '#e8c060' : '#777777') : (canCraft ? '#66cc44' : (hasBp ? '#447744' : '#aa6666'));
+                    ctx.lineWidth = isSelected ? 2.5 : 1.5;
+                    ctx.strokeRect(station.x - camera.x, station.y - camera.y, station.width, station.height);
+                    ctx.fillStyle = unlocked ? (isSelected ? '#ffe080' : '#dddddd') : (hasBp ? '#88cc88' : '#ff9999');
+                    ctx.font = isSelected ? 'bold 12px Arial' : '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const dispName = weaponConfigs[station.id].name + (lvl > 0 ? ' L'+lvl : '');
+                    ctx.fillText(unlocked ? dispName : (hasBp ? weaponConfigs[station.id].name : 'NO BLUEPRINT'), station.x - camera.x + station.width / 2, station.y - camera.y + station.height / 2 - 3);
+                    ctx.font = '8px Arial';
                     ctx.textBaseline = 'bottom';
-                    ctx.fillText(`$${weaponUnlockCosts[station.id]}`, station.x - camera.x + station.width / 2, station.y - camera.y + station.height - 2);
+                    if (!unlocked) {
+                        ctx.fillStyle = canCraft ? '#88cc44' : (hasBp ? '#668866' : '#664444');
+                        ctx.fillText(hasBp ? (canCraft ? `⚒ ${cost.scraps}sc ${cost.parts}pt` : `${cost.scraps}sc ${cost.parts}pt`) : 'Find blueprint', station.x - camera.x + station.width / 2, station.y - camera.y + station.height);
+                    } else {
+                        const upgCost = weaponUpgradeCost[station.id];
+                        const canUpg = lvl < 5 && _m.scraps >= upgCost.scraps && _m.parts >= upgCost.parts;
+                        ctx.fillStyle = canUpg ? '#88cc44' : '#554433';
+                        ctx.fillText(lvl < 5 ? `▲ ${upgCost.scraps}sc ${upgCost.parts}pt` : 'MAX', station.x - camera.x + station.width / 2, station.y - camera.y + station.height);
+                    }
                 }
             }
 
@@ -2886,20 +3030,26 @@
                 }
             }
 
-            // SKILLS — passive + active skill stations
-            const firstPassive = skillStations.find(s => s.type === 'passive');
-            const firstActive  = skillStations.find(s => s.type === 'active');
+            // SKILLS — passive + active skill stations (grid layout)
+            const passiveStations = skillStations.filter(s => s.type === 'passive');
+            const activeStations  = skillStations.filter(s => s.type === 'active');
             ctx.font = 'bold 11px Arial';
             ctx.textBaseline = 'bottom';
-            if (firstPassive) {
+            if (passiveStations.length > 0) {
+                const pMinX = Math.min(...passiveStations.map(s => s.x));
+                const pMaxX = Math.max(...passiveStations.map(s => s.x + s.width));
+                const pMinY = Math.min(...passiveStations.map(s => s.y));
                 ctx.fillStyle = '#88ffaa';
                 ctx.textAlign = 'center';
-                ctx.fillText('PASSIVE', firstPassive.x - camera.x + firstPassive.width / 2, firstPassive.y - camera.y - 2);
+                ctx.fillText('PASSIVE SKILLS', (pMinX + pMaxX) / 2 - camera.x, pMinY - camera.y - 4);
             }
-            if (firstActive) {
+            if (activeStations.length > 0) {
+                const aMinX = Math.min(...activeStations.map(s => s.x));
+                const aMaxX = Math.max(...activeStations.map(s => s.x + s.width));
+                const aMinY = Math.min(...activeStations.map(s => s.y));
                 ctx.fillStyle = '#ffaa88';
                 ctx.textAlign = 'center';
-                ctx.fillText('ACTIVE', firstActive.x - camera.x + firstActive.width / 2, firstActive.y - camera.y - 2);
+                ctx.fillText('ACTIVE SKILLS', (aMinX + aMaxX) / 2 - camera.x, aMinY - camera.y - 4);
             }
             for (let station of skillStations) {
                 const def = station.type === 'passive' ? passiveSkillDefs[station.id] : activeSkillDefs[station.id];
@@ -3061,13 +3211,26 @@
             let prompt = '';
             if (station) {
                 if (isWeaponUnlocked(station.id)) {
-                    prompt = `Press E to take ${weaponConfigs[station.id].name}`;
-                } else {
-                    const unlockCost = getWeaponUnlockCost(station.id);
-                    if (money >= unlockCost) {
-                        prompt = `Press E to unlock ${weaponConfigs[station.id].name} (${unlockCost} crumbs)`;
+                    const wl = loadWeaponLevels();
+                    const lvl = wl[station.id] || 0;
+                    const upgCost = weaponUpgradeCost[station.id];
+                    const m = loadMaterials();
+                    if (lvl < 5 && m.scraps >= upgCost.scraps && m.parts >= upgCost.parts) {
+                        prompt = `Press E to upgrade ${weaponConfigs[station.id].name} Lv${lvl}→Lv${lvl+1} (${upgCost.scraps} scraps, ${upgCost.parts} parts)`;
                     } else {
-                        prompt = `${weaponConfigs[station.id].name} unlock: ${unlockCost} crumbs (You have ${money})`;
+                        prompt = `Press E to take ${weaponConfigs[station.id].name}${lvl > 0 ? ' Lv'+lvl : ''}`;
+                    }
+                } else {
+                    const bp = loadBlueprints();
+                    const cost = weaponCraftCost[station.id];
+                    const m = loadMaterials();
+                    const hasBp = bp.includes(station.id);
+                    if (!hasBp) {
+                        prompt = `${weaponConfigs[station.id].name}: Blueprint needed — earn it by fighting`;
+                    } else if (m.scraps >= cost.scraps && m.parts >= cost.parts) {
+                        prompt = `Press E to craft ${weaponConfigs[station.id].name} (${cost.scraps} scraps, ${cost.parts} parts)`;
+                    } else {
+                        prompt = `${weaponConfigs[station.id].name}: Need ${cost.scraps} scraps & ${cost.parts} parts (have ${m.scraps}/${m.parts})`;
                     }
                 }
             } else if (gStation) {
@@ -3179,7 +3342,7 @@
             ctx.textAlign = 'left';
             ctx.textBaseline = 'top';
             ctx.fillText(`$${money}`, 20, 20);
-            
+
             // Draw coin icon
             ctx.beginPath();
             ctx.arc(15, 27, 6, 0, Math.PI * 2);
@@ -3187,6 +3350,13 @@
             ctx.strokeStyle = '#cc9900';
             ctx.lineWidth = 1;
             ctx.stroke();
+
+            // Show materials
+            const _m = loadMaterials();
+            ctx.fillStyle = '#aaddff';
+            ctx.font = '13px Arial';
+            ctx.textBaseline = 'top';
+            ctx.fillText(`⚙ ${_m.scraps} scraps  ${_m.parts} parts`, 20, 46);
         }
 
         // Draw health bar
@@ -3320,20 +3490,40 @@
             const station = getNearbyWeaponStation(playerCenterX, playerCenterY);
             if (station) {
                 if (isWeaponUnlocked(station.id)) {
-                    // Assign to correct slot based on category
+                    // Try upgrade first, then equip
+                    const wl = loadWeaponLevels();
+                    const lvl = wl[station.id] || 0;
+                    const upgCost = weaponUpgradeCost[station.id];
+                    const m = loadMaterials();
+                    if (lvl < 5 && m.scraps >= upgCost.scraps && m.parts >= upgCost.parts) {
+                        m.scraps -= upgCost.scraps;
+                        m.parts  -= upgCost.parts;
+                        saveMaterials(m);
+                        wl[station.id] = lvl + 1;
+                        saveWeaponLevels(wl);
+                        playSound(950, 0.12, 'sine');
+                        refreshEquipWindow();
+                        return true;
+                    }
+                    // Equip
                     if (weaponConfigs[station.id].category === 'sidearm') {
                         sidearmId = station.id;
                     } else {
                         selectedWeaponId = station.id;
                     }
                     applySelectedWeapon(true);
+                    refreshEquipWindow();
                     return true;
                 }
 
-                const unlockCost = getWeaponUnlockCost(station.id);
-                if (money >= unlockCost) {
-                    money -= unlockCost;
-                    saveBankedCrumbs();
+                // Try to craft using blueprint + materials
+                const bp = loadBlueprints();
+                const cost = weaponCraftCost[station.id];
+                const m = loadMaterials();
+                if (bp.includes(station.id) && m.scraps >= cost.scraps && m.parts >= cost.parts) {
+                    m.scraps -= cost.scraps;
+                    m.parts  -= cost.parts;
+                    saveMaterials(m);
                     unlockWeapon(station.id);
                     if (weaponConfigs[station.id].category === 'sidearm') {
                         sidearmId = station.id;
@@ -3342,6 +3532,7 @@
                     }
                     applySelectedWeapon(true);
                     playSound(850, 0.1, 'sine');
+                    refreshEquipWindow();
                     return true;
                 }
 
@@ -3497,11 +3688,377 @@
             continueButtonHover = false;
         }
 
+        // ─── Blueprint / Material system ───────────────────────────────────────
+        // Materials: scraps (common) and parts (uncommon), earned on extraction
+        // Blueprints: rare, one per weapon, found on extraction
+        // Weapon handedness (matches game.html weaponConfigs twoHanded flags)
+        const weaponHandedness = {
+            handgun: '1H', smg: '1H', sawedOffShotgun: '1H',
+            ar: '2H', rifle: '2H', shotgun: '2H',
+            flamethrower: '2H', acidShooter: '2H', crossbow: '2H', burstRifle: '2H'
+        };
+
+        // Crafting costs per weapon (blueprint required + scraps)
+        const weaponCraftCost = {
+            handgun:        { scraps: 0,  parts: 0  }, // always available
+            smg:            { scraps: 10, parts: 1  },
+            ar:             { scraps: 20, parts: 2  },
+            shotgun:        { scraps: 25, parts: 3  },
+            rifle:          { scraps: 35, parts: 4  },
+            flamethrower:   { scraps: 40, parts: 5  },
+            acidShooter:    { scraps: 38, parts: 5  },
+            crossbow:       { scraps: 30, parts: 4  },
+            burstRifle:     { scraps: 32, parts: 4  },
+            sawedOffShotgun:{ scraps: 18, parts: 2  }
+        };
+
+        // Upgrade costs per weapon level
+        const weaponUpgradeCost = {
+            handgun:        { scraps: 6,  parts: 0 },
+            smg:            { scraps: 12, parts: 1 },
+            ar:             { scraps: 15, parts: 2 },
+            shotgun:        { scraps: 18, parts: 2 },
+            rifle:          { scraps: 24, parts: 3 },
+            flamethrower:   { scraps: 24, parts: 3 },
+            acidShooter:    { scraps: 24, parts: 3 },
+            crossbow:       { scraps: 22, parts: 3 },
+            burstRifle:     { scraps: 22, parts: 3 },
+            sawedOffShotgun:{ scraps: 14, parts: 1 }
+        };
+
+        function loadMaterials() {
+            return {
+                scraps: parseInt(localStorage.getItem('mh_scraps') || '0', 10),
+                parts:  parseInt(localStorage.getItem('mh_parts')  || '0', 10)
+            };
+        }
+        function saveMaterials(m) {
+            localStorage.setItem('mh_scraps', String(Math.max(0, m.scraps)));
+            localStorage.setItem('mh_parts',  String(Math.max(0, m.parts)));
+        }
+        function loadBlueprints() {
+            try { return JSON.parse(localStorage.getItem('mh_blueprints') || '["handgun"]'); }
+            catch(e) { return ['handgun']; }
+        }
+        function saveBlueprints(bp) {
+            if (!bp.includes('handgun')) bp.push('handgun');
+            localStorage.setItem('mh_blueprints', JSON.stringify(bp));
+        }
+        function loadWeaponLevels() {
+            try { return JSON.parse(localStorage.getItem('mh_weaponLevels') || '{}'); }
+            catch(e) { return {}; }
+        }
+        function saveWeaponLevels(wl) {
+            localStorage.setItem('mh_weaponLevels', JSON.stringify(wl));
+        }
+
+        // Award materials after a run (call from extraction return)
+        function awardRunMaterials() {
+            const params = new URLSearchParams(window.location.search);
+            const kills = parseInt(params.get('runKills') || '0', 10);
+            if (kills === 0) return;
+            const m = loadMaterials();
+            m.scraps += kills;
+            m.parts  += Math.floor(kills / 8);
+            saveMaterials(m);
+            // Random blueprint drop
+            const bp = loadBlueprints();
+            const missing = baseWeaponIds.filter(id => !bp.includes(id));
+            if (missing.length > 0 && kills >= 5 && Math.random() < 0.35) {
+                bp.push(missing[Math.floor(Math.random() * missing.length)]);
+                saveBlueprints(bp);
+            }
+        }
+
+        // ─── off-hand state ─────────────────────────────────────────────────
+        let offHandId = localStorage.getItem('mh_offhand') || ''; // '' | 'shield' | weapon 1H id
+        function saveOffHand() { localStorage.setItem('mh_offhand', offHandId); }
+
+        // ─── Inventory / Equipment window logic ─────────────────────────────
+        const weaponIcons = {
+            handgun: '🔫', smg: '🔫', ar: '🔫', rifle: '🎯', shotgun: '🔫',
+            flamethrower: '🔥', acidShooter: '🧪', crossbow: '🏹',
+            burstRifle: '🔫', sawedOffShotgun: '🔫', shield: '🛡'
+        };
+
+        function refreshEquipWindow() {
+            const m = loadMaterials();
+            const bp = loadBlueprints();
+            const wl = loadWeaponLevels();
+
+            // Main slot
+            function fillSlot(el, id, labelText) {
+                if (!el) return;
+                const cfg = id && (weaponConfigs[id] || (id === 'shield' ? { name: 'Shield' } : null));
+                el.innerHTML = '';
+                el.dataset.weaponId = id || '';
+                if (id && cfg) {
+                    el.classList.remove('empty');
+                    el.setAttribute('draggable', 'true');
+                    const lbl = document.createElement('div');
+                    lbl.className = 'slot-label';
+                    lbl.textContent = labelText;
+                    const icon = document.createElement('div');
+                    icon.className = 'slot-icon';
+                    icon.textContent = weaponIcons[id] || '?';
+                    const name = document.createElement('div');
+                    name.className = 'slot-name';
+                    const lvl = wl[id] ? ` Lv${wl[id]}` : '';
+                    name.textContent = cfg.name + lvl;
+                    el.appendChild(lbl); el.appendChild(icon); el.appendChild(name);
+                } else {
+                    el.classList.add('empty');
+                    el.setAttribute('draggable', 'false');
+                    const lbl = document.createElement('div');
+                    lbl.className = 'slot-label';
+                    lbl.textContent = labelText;
+                    const icon = document.createElement('div');
+                    icon.className = 'slot-icon';
+                    icon.style.lineHeight = '64px';
+                    icon.textContent = '—';
+                    el.appendChild(lbl); el.appendChild(icon);
+                }
+            }
+
+            const mainIsOneHanded = !selectedWeaponId || weaponHandedness[selectedWeaponId] === '1H';
+            fillSlot(document.getElementById('slot-main'), selectedWeaponId, 'MAIN');
+
+            const offSlot = document.getElementById('slot-offhand');
+            if (mainIsOneHanded) {
+                offSlot.style.display = 'inline-block';
+                fillSlot(offSlot, offHandId, 'OFF-HAND');
+            } else {
+                offSlot.style.display = 'none';
+            }
+            fillSlot(document.getElementById('slot-sidearm'), sidearmId, 'SIDEARM');
+
+            // Mod slots
+            const modRow = document.getElementById('modSlotRow');
+            modRow.innerHTML = '';
+            const maxMods = 2;
+            for (let i = 0; i < maxMods; i++) {
+                const modId = equippedMods.main[i] || '';
+                const modEl = document.createElement('div');
+                modEl.className = 'inv-slot equipped-slot' + (modId ? '' : ' empty');
+                modEl.dataset.slot = 'mod-main-' + i;
+                modEl.dataset.weaponId = modId;
+                modEl.setAttribute('draggable', modId ? 'true' : 'false');
+                const lbl = document.createElement('div'); lbl.className = 'slot-label'; lbl.textContent = 'MOD';
+                const icon = document.createElement('div'); icon.className = 'slot-icon'; icon.textContent = modId ? '⚙️' : '—';
+                const nm = document.createElement('div'); nm.className = 'slot-name';
+                nm.textContent = modId ? (weaponModDefs[modId] ? weaponModDefs[modId].name : modId) : '';
+                modEl.appendChild(lbl); modEl.appendChild(icon); modEl.appendChild(nm);
+                modRow.appendChild(modEl);
+            }
+
+            // Grenade slot
+            const gRow = document.getElementById('grenadeSlotRow');
+            gRow.innerHTML = '';
+            const gEl = document.createElement('div');
+            gEl.className = 'inv-slot equipped-slot' + (grenadeCount > 0 ? '' : ' empty');
+            const gIcon = { fire:'🔥', ice:'❄️', smoke:'💨', heal:'💚' };
+            gEl.innerHTML = `<div class="slot-label">GRENADE</div><div class="slot-icon">${grenadeCount > 0 ? (gIcon[equippedGrenadeType] || '💣') : '—'}</div><div class="slot-name">${grenadeCount > 0 ? grenadeCount + '× ' + (grenadeTypes[equippedGrenadeType]?.name || '') : 'empty'}</div>`;
+            gRow.appendChild(gEl);
+
+            // Inventory weapon slots
+            const invSlots = document.getElementById('invWeaponSlots');
+            invSlots.innerHTML = '';
+            const wl2 = loadWeaponLevels();
+            for (const id of baseWeaponIds) {
+                const hasBp  = bp.includes(id);
+                const isBuilt = isWeaponUnlocked(id);
+                const cost = weaponCraftCost[id];
+                const upgCost = weaponUpgradeCost[id];
+                const currLvl = wl2[id] || 0;
+                const canCraft = hasBp && !isBuilt && m.scraps >= cost.scraps && m.parts >= cost.parts;
+                const canUpgrade = isBuilt && m.scraps >= upgCost.scraps && m.parts >= upgCost.parts;
+
+                const el = document.createElement('div');
+                el.className = 'inv-slot' + (isBuilt ? '' : ' empty');
+                el.style.width = '72px';
+                el.style.height = '72px';
+                el.dataset.weaponId = id;
+                el.setAttribute('draggable', isBuilt ? 'true' : 'false');
+                el.title = isBuilt
+                    ? `${weaponConfigs[id].name} (Lv${currLvl}) — drag to equip\nUpgrade: ${upgCost.scraps} scraps, ${upgCost.parts} parts`
+                    : (hasBp ? `Blueprint found!\nCraft: ${cost.scraps} scraps, ${cost.parts} parts\n(Click to craft)` : 'Blueprint not found');
+                const icon = document.createElement('div');
+                icon.className = 'slot-icon';
+                icon.textContent = weaponIcons[id] || '?';
+                icon.style.lineHeight = '42px';
+                icon.style.fontSize = '22px';
+                const nm = document.createElement('div');
+                nm.className = 'slot-name';
+                nm.textContent = weaponConfigs[id].name + (currLvl > 0 ? ' Lv'+currLvl : '');
+                nm.style.bottom = '14px';
+                const status = document.createElement('div');
+                status.style.cssText = 'position:absolute;bottom:2px;left:0;right:0;font-size:8px;text-align:center;';
+                if (isBuilt) {
+                    status.style.color = '#88cc44';
+                    status.textContent = canUpgrade ? '▲ UPGRADE' : 'READY';
+                } else if (hasBp) {
+                    status.style.color = canCraft ? '#ffcc44' : '#888';
+                    status.textContent = canCraft ? '⚒ CRAFT' : `${cost.scraps}sc ${cost.parts}pt`;
+                } else {
+                    status.style.color = '#555';
+                    status.textContent = 'No blueprint';
+                }
+                el.appendChild(icon); el.appendChild(nm); el.appendChild(status);
+                el.addEventListener('click', () => handleInvItemClick(id));
+                invSlots.appendChild(el);
+            }
+
+            // Add shield to inventory
+            const shieldEl = document.createElement('div');
+            shieldEl.className = 'inv-slot' + (true ? '' : ' empty');
+            shieldEl.style.width = '72px'; shieldEl.style.height = '72px';
+            shieldEl.dataset.weaponId = 'shield';
+            shieldEl.setAttribute('draggable', 'true');
+            shieldEl.title = 'Shield — equip in off-hand with 1H weapon\n-25% damage taken';
+            shieldEl.innerHTML = '<div class="slot-icon" style="line-height:42px;font-size:22px;">🛡</div><div class="slot-name" style="bottom:14px;">Shield</div><div style="position:absolute;bottom:2px;left:0;right:0;font-size:8px;text-align:center;color:#88cc44;">DRAG→OFF</div>';
+            shieldEl.addEventListener('click', () => handleInvItemClick('shield'));
+            invSlots.appendChild(shieldEl);
+
+            // Materials
+            document.getElementById('matScraps').textContent = m.scraps;
+            document.getElementById('matParts').textContent = m.parts;
+            const bpText = bp.filter(id => id !== 'handgun').map(id => weaponConfigs[id]?.name || id).join(', ') || 'none';
+            document.getElementById('matBlueprints').textContent = bpText;
+        }
+
+        function handleInvItemClick(id) {
+            const bp = loadBlueprints();
+            const m = loadMaterials();
+            const wl = loadWeaponLevels();
+            if (id === 'shield') {
+                // Equip/unequip shield to off-hand
+                const mainIsOneHanded = !selectedWeaponId || weaponHandedness[selectedWeaponId] === '1H';
+                if (mainIsOneHanded) {
+                    offHandId = offHandId === 'shield' ? '' : 'shield';
+                    saveOffHand();
+                    refreshEquipWindow();
+                }
+                return;
+            }
+            const isBuilt = isWeaponUnlocked(id);
+            const cost = weaponCraftCost[id];
+            if (!isBuilt && bp.includes(id) && m.scraps >= cost.scraps && m.parts >= cost.parts) {
+                // Craft it
+                m.scraps -= cost.scraps;
+                m.parts  -= cost.parts;
+                saveMaterials(m);
+                unlockWeapon(id);
+                playSound(850, 0.1, 'sine');
+                refreshEquipWindow();
+            } else if (isBuilt) {
+                // Upgrade it
+                const upgCost = weaponUpgradeCost[id];
+                const currLvl = wl[id] || 0;
+                if (currLvl < 5 && m.scraps >= upgCost.scraps && m.parts >= upgCost.parts) {
+                    m.scraps -= upgCost.scraps;
+                    m.parts  -= upgCost.parts;
+                    saveMaterials(m);
+                    wl[id] = currLvl + 1;
+                    saveWeaponLevels(wl);
+                    playSound(950, 0.12, 'sine');
+                    refreshEquipWindow();
+                }
+            }
+        }
+
+        // ─── Drag / drop between inventory and equipment slots ──────────────
+        let dragWeaponId = '';
+        let dragFromSlot = '';
+
+        function setupDragDrop() {
+            document.addEventListener('dragstart', (e) => {
+                const el = e.target.closest('.inv-slot');
+                if (!el || !el.dataset.weaponId) return;
+                dragWeaponId = el.dataset.weaponId;
+                dragFromSlot = el.dataset.slot || 'inventory';
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            document.addEventListener('dragover', (e) => {
+                const el = e.target.closest('.inv-slot.equipped-slot');
+                if (el) { e.preventDefault(); el.classList.add('drop-target'); }
+            });
+            document.addEventListener('dragleave', (e) => {
+                const el = e.target.closest('.inv-slot.equipped-slot');
+                if (el) el.classList.remove('drop-target');
+            });
+            document.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const el = e.target.closest('.inv-slot.equipped-slot');
+                if (!el) return;
+                el.classList.remove('drop-target');
+                const targetSlot = el.dataset.slot;
+                applyDragDrop(dragWeaponId, targetSlot);
+            });
+        }
+
+        function applyDragDrop(wId, targetSlot) {
+            if (!wId) return;
+            if (targetSlot === 'main') {
+                if (wId === 'shield') return; // can't equip shield as main
+                if (!isWeaponUnlocked(wId)) return;
+                const category = weaponConfigs[wId]?.category;
+                if (category === 'sidearm') return; // sidearms go to sidearm slot
+                selectedWeaponId = wId;
+                // If 2H, clear off-hand
+                if (weaponHandedness[wId] === '2H') { offHandId = ''; saveOffHand(); }
+                applySelectedWeapon(true);
+            } else if (targetSlot === 'offhand') {
+                const mainIsOneHanded = !selectedWeaponId || weaponHandedness[selectedWeaponId] === '1H';
+                if (!mainIsOneHanded) return;
+                if (wId === 'shield') {
+                    offHandId = 'shield';
+                } else if (isWeaponUnlocked(wId) && weaponHandedness[wId] === '1H') {
+                    offHandId = wId;
+                } else return;
+                saveOffHand();
+            } else if (targetSlot === 'sidearm') {
+                if (wId === 'shield') return;
+                if (!isWeaponUnlocked(wId)) return;
+                const category = weaponConfigs[wId]?.category;
+                if (category !== 'sidearm') return;
+                sidearmId = wId;
+                applySelectedWeapon(true);
+            } else if (targetSlot && targetSlot.startsWith('mod-main-')) {
+                if (!weaponModDefs[wId]) return;
+                const idx = parseInt(targetSlot.split('-')[2]);
+                if (!equippedMods.main.includes(wId) && equippedMods.main.length < 2) {
+                    equippedMods.main[idx] = wId;
+                }
+            }
+            refreshEquipWindow();
+        }
+
+        // Toggle inventory window
+        const btnToggleInv = document.getElementById('btnToggleInv');
+        const invWindow = document.getElementById('invWindow');
+        btnToggleInv.addEventListener('click', () => {
+            const visible = invWindow.style.display !== 'none';
+            invWindow.style.display = visible ? 'none' : 'block';
+            if (!visible) refreshEquipWindow();
+        });
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'i') {
+                const visible = invWindow.style.display !== 'none';
+                invWindow.style.display = visible ? 'none' : 'block';
+                if (!visible) refreshEquipWindow();
+            }
+        }, true); // capture phase so it fires before the canvas keydown
+
+        setupDragDrop();
+        // Award materials from last run (if any kills param)
+        awardRunMaterials();
+
         function enterBase() {
             loadTransientStateFromQuery();
             applySelectedWeapon(false);
             resetToBase();
             gameState = 'base';
+            refreshEquipWindow();
         }
 
         function startRunFromBase() {
