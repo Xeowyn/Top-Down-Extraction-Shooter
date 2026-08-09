@@ -1681,62 +1681,6 @@
             return { maxAmmo: baseWeapon.maxAmmo, reloadFrames: baseWeapon.reloadFrames };
         }
 
-        function chooseEnemyWeaponId() {
-            const roll = Math.random();
-            if (difficulty >= 12) {
-                if (roll < 0.35) return 'ar';
-                if (roll < 0.55) return 'rifle';
-                if (roll < 0.75) return 'shotgun';
-                return 'handgun';
-            }
-            if (difficulty >= 6) {
-                if (roll < 0.3) return 'ar';
-                if (roll < 0.42) return 'rifle';
-                if (roll < 0.55) return 'shotgun';
-                return 'handgun';
-            }
-            if (difficulty >= 3) {
-                if (roll < 0.22) return 'ar';
-                if (roll < 0.32) return 'rifle';
-                if (roll < 0.42) return 'shotgun';
-                return 'handgun';
-            }
-            return 'handgun';
-        }
-
-        function chooseEnemyVariant() {
-            const roll = Math.random();
-            if (difficulty >= 4 && roll < 0.05) {
-                return 'special';
-            }
-            if (difficulty >= 3 && roll < 0.15) {
-                return 'melee';
-            }
-            return 'ranged';
-        }
-
-        function chooseSpecialWeaponId() {
-            const options = ['handgun', 'ar', 'rifle', 'shotgun'];
-            return options[Math.floor(Math.random() * options.length)];
-        }
-
-        function chooseEliteVariant() {
-            const roll = Math.random();
-            if (roll < 0.36) {
-                return 'eliteFlame';
-            }
-            if (roll < 0.72) {
-                return 'eliteMinigun';
-            }
-            return 'eliteSniper';
-        }
-
-        function getEliteWeaponId(variant) {
-            if (variant === 'eliteFlame') return 'flameShotgun';
-            if (variant === 'eliteMinigun') return 'minigun';
-            return 'sniper';
-        }
-
         function tryPlayerShootAt(mapMouseX, mapMouseY) {
             if (gameState !== 'playing' || isPaused || player.isReloading || player.ammo <= 0 || player.fireCooldown > 0) {
                 return false;
@@ -3184,102 +3128,6 @@
             return hasLineOfSight(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, targetX, targetY);
         }
 
-        function raySegmentIntersection(ox, oy, dx, dy, x1, y1, x2, y2) {
-            const rdx = dx;
-            const rdy = dy;
-            const sdx = x2 - x1;
-            const sdy = y2 - y1;
-            const rxs = rdx * sdy - rdy * sdx;
-
-            if (rxs === 0) return null;
-
-            const qpx = x1 - ox;
-            const qpy = y1 - oy;
-            const t = (qpx * sdy - qpy * sdx) / rxs;
-            const u = (qpx * rdy - qpy * rdx) / rxs;
-
-            if (t >= 0 && u >= 0 && u <= 1) {
-                return { x: ox + rdx * t, y: oy + rdy * t, t };
-            }
-            return null;
-        }
-
-        function getVisibilityPolygon(originX, originY, radius) {
-            const angles = [];
-            const epsilon = 0.00005;
-            const occluderPadding = 1;
-
-            for (let a = 0; a < Math.PI * 2; a += Math.PI / 180) {
-                angles.push(a);
-            }
-
-            for (let obstacle of obstacles) {
-                const padded = {
-                    x: obstacle.x - occluderPadding,
-                    y: obstacle.y - occluderPadding,
-                    width: obstacle.width + occluderPadding * 2,
-                    height: obstacle.height + occluderPadding * 2
-                };
-                const corners = [
-                    { x: padded.x, y: padded.y },
-                    { x: padded.x + padded.width, y: padded.y },
-                    { x: padded.x + padded.width, y: padded.y + padded.height },
-                    { x: padded.x, y: padded.y + padded.height }
-                ];
-
-                for (let corner of corners) {
-                    const dist = Math.hypot(corner.x - originX, corner.y - originY);
-                    if (dist <= radius + 100) {
-                        const angle = Math.atan2(corner.y - originY, corner.x - originX);
-                        angles.push(angle - epsilon, angle - epsilon / 2, angle, angle + epsilon / 2, angle + epsilon);
-                    }
-                }
-            }
-
-            const segments = [];
-            for (let obstacle of obstacles) {
-                const padded = {
-                    x: obstacle.x - occluderPadding,
-                    y: obstacle.y - occluderPadding,
-                    width: obstacle.width + occluderPadding * 2,
-                    height: obstacle.height + occluderPadding * 2
-                };
-                segments.push(
-                    { x1: padded.x, y1: padded.y, x2: padded.x + padded.width, y2: padded.y },
-                    { x1: padded.x + padded.width, y1: padded.y, x2: padded.x + padded.width, y2: padded.y + padded.height },
-                    { x1: padded.x + padded.width, y1: padded.y + padded.height, x2: padded.x, y2: padded.y + padded.height },
-                    { x1: padded.x, y1: padded.y + padded.height, x2: padded.x, y2: padded.y }
-                );
-            }
-
-            segments.push(
-                { x1: 0, y1: 0, x2: mapWidth, y2: 0 },
-                { x1: mapWidth, y1: 0, x2: mapWidth, y2: mapHeight },
-                { x1: mapWidth, y1: mapHeight, x2: 0, y2: mapHeight },
-                { x1: 0, y1: mapHeight, x2: 0, y2: 0 }
-            );
-
-            const points = [];
-            for (let angle of angles) {
-                const dx = Math.cos(angle);
-                const dy = Math.sin(angle);
-                let closestT = radius;
-                let closest = { x: originX + dx * radius, y: originY + dy * radius, t: radius };
-
-                for (let seg of segments) {
-                    const hit = raySegmentIntersection(originX, originY, dx, dy, seg.x1, seg.y1, seg.x2, seg.y2);
-                    if (hit && hit.t > 0.01 && hit.t < closestT) {
-                        closestT = hit.t;
-                        closest = hit;
-                    }
-                }
-                points.push({ x: closest.x, y: closest.y, angle });
-            }
-
-            points.sort((a, b) => a.angle - b.angle);
-            return points;
-        }
-
         function drawLightingEffect() {
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
@@ -3352,13 +3200,6 @@
             }
         }
 
-        function drawDarknessOverlay() {
-            ctx.save();
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.restore();
-        }
-
         function getCoverPoint(enemy, targetX, targetY) {
             const enemyCenterX = enemy.x + enemy.width / 2;
             const enemyCenterY = enemy.y + enemy.height / 2;
@@ -3392,24 +3233,6 @@
             const coverX = clamp(centerX + (dirX / length) * offset, 0, mapWidth - enemy.width);
             const coverY = clamp(centerY + (dirY / length) * offset, 0, mapHeight - enemy.height);
             return { x: coverX, y: coverY };
-        }
-
-        function dropCoinsAt(x, y, eliteDrop = false) {
-            const coinCount = eliteDrop
-                ? (16 + Math.floor(Math.random() * 9))
-                : (3 + Math.floor(Math.random() * 5));
-            const coinValue = eliteDrop ? 9 : 3;
-            for (let k = 0; k < coinCount; k++) {
-                const angle = (k / coinCount) * Math.PI * 2 + Math.random() * 0.5;
-                const distance = eliteDrop ? (24 + Math.random() * 34) : (20 + Math.random() * 20);
-                coins.push({
-                    x: x + Math.cos(angle) * distance,
-                    y: y + Math.sin(angle) * distance,
-                    size: 6,
-                    color: '#ffcc00',
-                    value: coinValue
-                });
-            }
         }
 
         function dropHealingItemAt(x, y) {
@@ -5665,42 +5488,6 @@
             ctx.globalAlpha = 1;
         }
 
-        function getValidPlayerSpawn() {
-            // Define safe spawn areas (center of main walkable zones)
-            const safeLocations = [
-                { x: 3200, y: 2200 },  // Middle of top zone
-                { x: 4300, y: 2500 },  // Center-ish
-                { x: 2500, y: 2800 },  // Left-center
-                { x: 5500, y: 2800 },  // Right-center
-                { x: 3800, y: 3500 }   // Lower center
-            ];
-
-            // Test each safe location
-            for (let loc of safeLocations) {
-                if (!checkObstacleCollision(loc.x, loc.y, player.width, player.height)) {
-                    return loc;
-                }
-            }
-
-            // Fallback: find the closest valid position near center
-            const centerX = mapWidth / 2;
-            const centerY = mapHeight / 2;
-            let bestSpawn = null;
-            let bestDistance = Infinity;
-
-            for (let attempt = 0; attempt < 50; attempt++) {
-                const spawn = getRandomWalkablePosition(player.width, player.height);
-                const distance = Math.hypot(spawn.x - centerX, spawn.y - centerY);
-                
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestSpawn = spawn;
-                }
-            }
-
-            return bestSpawn || { x: 3200, y: 2200 };
-        }
-
         // Procedural level layout generator — runs every time a level is loaded
         function generateLevelLayout() {
             const level = currentLevel;
@@ -5869,18 +5656,6 @@
                                width:Math.round(rand(300,500)), height:150, type:'gardenBed', isGardenBed:true });
                 }
             }
-        }
-
-        // Randomize obstacle positions within amplitude pixels each run
-        function jitterObstacles(baseObstacles, amplitude, skipPredicate) {
-            return baseObstacles.map(o => {
-                if (skipPredicate && skipPredicate(o)) return { ...o };
-                return {
-                    ...o,
-                    x: o.x + (Math.random() - 0.5) * amplitude * 2,
-                    y: o.y + (Math.random() - 0.5) * amplitude * 2
-                };
-            });
         }
 
         function setLevelData() {

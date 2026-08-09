@@ -193,18 +193,6 @@
         const baseWeaponIds = ['handgun', 'smg', 'ar', 'rifle', 'shotgun', 'flamethrower', 'acidShooter', 'crossbow', 'burstRifle', 'sawedOffShotgun'];
         const mainWeaponIds = ['ar', 'rifle', 'shotgun', 'flamethrower', 'acidShooter', 'crossbow', 'burstRifle'];
         const sidearmIds = ['handgun', 'smg', 'sawedOffShotgun'];
-        const weaponUnlockCosts = {
-            handgun: 0,
-            smg: 400,
-            ar: 750,
-            shotgun: 1000,
-            rifle: 1500,
-            flamethrower: 2000,
-            acidShooter: 1800,
-            crossbow: 1400,
-            burstRifle: 1600,
-            sawedOffShotgun: 800
-        };
 
         // Grenade system
         const grenadeTypes = {
@@ -721,11 +709,6 @@
             pickupRange: { level: 0, baseCost: 55, multiplier: 1.5 }
         };
         
-        function getUpgradeCost(upgradeType) {
-            const upgrade = upgrades[upgradeType];
-            return Math.floor(upgrade.baseCost * Math.pow(upgrade.multiplier, upgrade.level));
-        }
-
         function resetUpgradeLevels() {
             upgrades.damage.level = 0;
             upgrades.moveSpeed.level = 0;
@@ -748,10 +731,6 @@
 
         function isWeaponUnlocked(weaponId) {
             return !!unlockedWeapons[weaponId];
-        }
-
-        function getWeaponUnlockCost(weaponId) {
-            return weaponUnlockCosts[weaponId] || 0;
         }
 
         function unlockWeapon(weaponId) {
@@ -920,21 +899,6 @@
                 player.ammo = player.maxAmmo;
             }
             applyUpgradesToPlayer();
-        }
-
-        function getHubWeaponButtons() {
-            const buttonWidth = 210;
-            const buttonHeight = 100;
-            const gap = 20;
-            const totalWidth = buttonWidth * 2 + gap;
-            const startX = canvas.width / 2 - totalWidth / 2;
-            const startY = canvas.height / 2 + 130;
-            return [
-                { id: 'handgun', x: startX, y: startY, width: buttonWidth, height: buttonHeight },
-                { id: 'ar', x: startX + buttonWidth + gap, y: startY, width: buttonWidth, height: buttonHeight },
-                { id: 'rifle', x: startX, y: startY + buttonHeight + gap, width: buttonWidth, height: buttonHeight },
-                { id: 'shotgun', x: startX + buttonWidth + gap, y: startY + buttonHeight + gap, width: buttonWidth, height: buttonHeight }
-            ];
         }
 
         function getHubPlayButton() {
@@ -2014,82 +1978,6 @@
             return null;
         }
 
-        function getVisibilityPolygon(originX, originY, radius) {
-            const angles = [];
-            const epsilon = 0.00005;
-            const occluderPadding = 1;
-
-            for (let a = 0; a < Math.PI * 2; a += Math.PI / 180) {
-                angles.push(a);
-            }
-
-            for (let obstacle of obstacles) {
-                const padded = {
-                    x: obstacle.x - occluderPadding,
-                    y: obstacle.y - occluderPadding,
-                    width: obstacle.width + occluderPadding * 2,
-                    height: obstacle.height + occluderPadding * 2
-                };
-                const corners = [
-                    { x: padded.x, y: padded.y },
-                    { x: padded.x + padded.width, y: padded.y },
-                    { x: padded.x + padded.width, y: padded.y + padded.height },
-                    { x: padded.x, y: padded.y + padded.height }
-                ];
-
-                for (let corner of corners) {
-                    const dist = Math.hypot(corner.x - originX, corner.y - originY);
-                    if (dist <= radius + 100) {
-                        const angle = Math.atan2(corner.y - originY, corner.x - originX);
-                        angles.push(angle - epsilon, angle - epsilon / 2, angle, angle + epsilon / 2, angle + epsilon);
-                    }
-                }
-            }
-
-            const segments = [];
-            for (let obstacle of obstacles) {
-                const padded = {
-                    x: obstacle.x - occluderPadding,
-                    y: obstacle.y - occluderPadding,
-                    width: obstacle.width + occluderPadding * 2,
-                    height: obstacle.height + occluderPadding * 2
-                };
-                segments.push(
-                    { x1: padded.x, y1: padded.y, x2: padded.x + padded.width, y2: padded.y },
-                    { x1: padded.x + padded.width, y1: padded.y, x2: padded.x + padded.width, y2: padded.y + padded.height },
-                    { x1: padded.x + padded.width, y1: padded.y + padded.height, x2: padded.x, y2: padded.y + padded.height },
-                    { x1: padded.x, y1: padded.y + padded.height, x2: padded.x, y2: padded.y }
-                );
-            }
-
-            segments.push(
-                { x1: 0, y1: 0, x2: mapWidth, y2: 0 },
-                { x1: mapWidth, y1: 0, x2: mapWidth, y2: mapHeight },
-                { x1: mapWidth, y1: mapHeight, x2: 0, y2: mapHeight },
-                { x1: 0, y1: mapHeight, x2: 0, y2: 0 }
-            );
-
-            const points = [];
-            for (let angle of angles) {
-                const dx = Math.cos(angle);
-                const dy = Math.sin(angle);
-                let closestT = radius;
-                let closest = { x: originX + dx * radius, y: originY + dy * radius, t: radius };
-
-                for (let seg of segments) {
-                    const hit = raySegmentIntersection(originX, originY, dx, dy, seg.x1, seg.y1, seg.x2, seg.y2);
-                    if (hit && hit.t > 0.01 && hit.t < closestT) {
-                        closestT = hit.t;
-                        closest = hit;
-                    }
-                }
-                points.push({ x: closest.x, y: closest.y, angle });
-            }
-
-            points.sort((a, b) => a.angle - b.angle);
-            return points;
-        }
-
         function drawLightingEffect() {
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
@@ -2160,13 +2048,6 @@
                     }
                 }
             }
-        }
-
-        function drawDarknessOverlay() {
-            ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.restore();
         }
 
         function getCoverPoint(enemy, targetX, targetY) {
@@ -3196,13 +3077,13 @@
         function drawBasePrompts() {
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
-            const station = getNearbyWeaponStation(playerCenterX, playerCenterY);
-            const gStation = getNearbyGrenadeStation(playerCenterX, playerCenterY);
-            const modStation = getNearbyModStation(playerCenterX, playerCenterY);
-            const skillStation = getNearbySkillStation(playerCenterX, playerCenterY);
-            const levelStation = getNearbyLevelStation(playerCenterX, playerCenterY);
+            const station = findNearbyStation(weaponStations, playerCenterX, playerCenterY, weaponInteractRange);
+            const gStation = findNearbyStation(grenadeStations, playerCenterX, playerCenterY);
+            const modStation = findNearbyStation(modStations, playerCenterX, playerCenterY);
+            const skillStation = findNearbyStation(skillStations, playerCenterX, playerCenterY);
+            const levelStation = findNearbyStation(levelStations, playerCenterX, playerCenterY);
             const nearDoor = !baseDoorOpen && isPlayerNearDoor(playerCenterX, playerCenterY);
-            const wardrobeStation = getNearbyWardrobeStation(playerCenterX, playerCenterY);
+            const wardrobeStation = findNearbyStation(wardrobeStations, playerCenterX, playerCenterY);
 
             if (!station && !nearDoor && !gStation && !modStation && !skillStation && !levelStation && !wardrobeStation) {
                 return;
@@ -3406,77 +3287,17 @@
             return Math.hypot(playerCenterX - doorCenterX, playerCenterY - doorCenterY) <= baseInteractRange;
         }
 
-        function getNearbyWeaponStation(playerCenterX, playerCenterY) {
-            for (let station of weaponStations) {
+        const stationInteractRange = 80;
+
+        // Shared by every "is player standing next to X" check in the base —
+        // weapon racks, grenade box, mod bench, skill board, level doors, wardrobe.
+        function findNearbyStation(stations, playerCenterX, playerCenterY, range = stationInteractRange) {
+            for (let station of stations) {
                 const centerX = station.x + station.width / 2;
                 const centerY = station.y + station.height / 2;
-                if (Math.hypot(playerCenterX - centerX, playerCenterY - centerY) <= weaponInteractRange) {
+                if (Math.hypot(playerCenterX - centerX, playerCenterY - centerY) <= range) {
                     return station;
                 }
-            }
-            return null;
-        }
-        
-        function getNearbyUpgradeStation(playerCenterX, playerCenterY) {
-            const interactRange = 80;
-            for (let station of upgradeStations) {
-                const centerX = station.x + station.width / 2;
-                const centerY = station.y + station.height / 2;
-                if (Math.hypot(playerCenterX - centerX, playerCenterY - centerY) <= interactRange) {
-                    return station;
-                }
-            }
-            return null;
-        }
-
-        function getNearbyGrenadeStation(playerCenterX, playerCenterY) {
-            const interactRange = 80;
-            for (let station of grenadeStations) {
-                const cx = station.x + station.width / 2;
-                const cy = station.y + station.height / 2;
-                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) {
-                    return station;
-                }
-            }
-            return null;
-        }
-
-        function getNearbyModStation(playerCenterX, playerCenterY) {
-            const interactRange = 80;
-            for (let station of modStations) {
-                const cx = station.x + station.width / 2;
-                const cy = station.y + station.height / 2;
-                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) return station;
-            }
-            return null;
-        }
-
-        function getNearbySkillStation(playerCenterX, playerCenterY) {
-            const interactRange = 80;
-            for (let station of skillStations) {
-                const cx = station.x + station.width / 2;
-                const cy = station.y + station.height / 2;
-                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) return station;
-            }
-            return null;
-        }
-
-        function getNearbyLevelStation(playerCenterX, playerCenterY) {
-            const interactRange = 80;
-            for (let station of levelStations) {
-                const cx = station.x + station.width / 2;
-                const cy = station.y + station.height / 2;
-                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) return station;
-            }
-            return null;
-        }
-
-        function getNearbyWardrobeStation(playerCenterX, playerCenterY) {
-            const interactRange = 80;
-            for (let station of wardrobeStations) {
-                const cx = station.x + station.width / 2;
-                const cy = station.y + station.height / 2;
-                if (Math.hypot(playerCenterX - cx, playerCenterY - cy) <= interactRange) return station;
             }
             return null;
         }
@@ -3487,7 +3308,7 @@
             }
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
-            const station = getNearbyWeaponStation(playerCenterX, playerCenterY);
+            const station = findNearbyStation(weaponStations, playerCenterX, playerCenterY, weaponInteractRange);
             if (station) {
                 if (isWeaponUnlocked(station.id)) {
                     // Try upgrade first, then equip
@@ -3541,7 +3362,7 @@
             }
 
             // Grenade station interaction
-            const gStation = getNearbyGrenadeStation(playerCenterX, playerCenterY);
+            const gStation = findNearbyStation(grenadeStations, playerCenterX, playerCenterY);
             if (gStation) {
                 const effMax = getEffectiveGrenadeMax();
                 if (money >= grenadeBaseCost && grenadeCount < effMax) {
@@ -3556,7 +3377,7 @@
                 return false;
             }
             // Mod station interaction: not equipped → buy+equip main → move to sidearm → unequip
-            const modStation = getNearbyModStation(playerCenterX, playerCenterY);
+            const modStation = findNearbyStation(modStations, playerCenterX, playerCenterY);
             if (modStation) {
                 const def = weaponModDefs[modStation.id];
                 const onMain = equippedMods.main.includes(modStation.id);
@@ -3584,7 +3405,7 @@
             }
 
             // Skill station interaction: buy skill permanently
-            const skillStation = getNearbySkillStation(playerCenterX, playerCenterY);
+            const skillStation = findNearbyStation(skillStations, playerCenterX, playerCenterY);
             if (skillStation) {
                 const def = skillStation.type === 'passive' ? passiveSkillDefs[skillStation.id] : activeSkillDefs[skillStation.id];
                 const arr = skillStation.type === 'passive' ? learnedSkills.passive : learnedSkills.active;
@@ -3604,7 +3425,7 @@
             }
 
             // Level station interaction: select level
-            const levelStation = getNearbyLevelStation(playerCenterX, playerCenterY);
+            const levelStation = findNearbyStation(levelStations, playerCenterX, playerCenterY);
             if (levelStation) {
                 if (levelStation.unlocked) {
                     currentLevel = levelStation.id;
@@ -3616,7 +3437,7 @@
             }
 
             // Wardrobe station interaction: buy or equip skin
-            const wardrobeStation = getNearbyWardrobeStation(playerCenterX, playerCenterY);
+            const wardrobeStation = findNearbyStation(wardrobeStations, playerCenterX, playerCenterY);
             if (wardrobeStation) {
                 const def = skinDefs[wardrobeStation.id];
                 const isOwned = unlockedSkins.includes(wardrobeStation.id);
@@ -4059,15 +3880,6 @@
             resetToBase();
             gameState = 'base';
             refreshEquipWindow();
-        }
-
-        function startRunFromBase() {
-            if (gameState !== 'base') {
-                return;
-            }
-            setBaseDoorOpen(true);
-            resetRunState();
-            gameState = 'playing';
         }
 
         // Draw hub screen
