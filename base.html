@@ -4000,8 +4000,11 @@
         // Award materials from last run (if any kills param)
         awardRunMaterials();
 
-        // How To Play overlay — shown once automatically the first time someone
-        // reaches the base, and any time after that via the button or H key.
+        // How To Play overlay — shown automatically the first time someone
+        // reaches the base each time they open the game (sessionStorage, so
+        // it resets on a fresh visit but stays quiet across repeat trips back
+        // to base within the same session), and any time after that via the
+        // button or H key.
         const helpWindow = document.getElementById('helpWindow');
         const btnHelp = document.getElementById('btnHelp');
         const btnCloseHelp = document.getElementById('btnCloseHelp');
@@ -4021,8 +4024,8 @@
             resetToBase();
             gameState = 'base';
             refreshEquipWindow();
-            if (!localStorage.getItem('mh_seenBaseTutorial')) {
-                localStorage.setItem('mh_seenBaseTutorial', '1');
+            if (!sessionStorage.getItem('mh_seenBaseTutorial')) {
+                sessionStorage.setItem('mh_seenBaseTutorial', '1');
                 showHelp();
             }
         }
