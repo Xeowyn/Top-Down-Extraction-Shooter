@@ -2,7 +2,11 @@
 
 A game where you play as a mouse. You sneak into a house, grab loot, fight off bugs and other mice, and then escape before you get killed. It's made with plain HTML, CSS, and JavaScript — no game engine, nothing to install or build.
 
-## How to run it
+## Play it now
+
+**[xeowyn.github.io/Top-Down-Extraction-Shooter](https://xeowyn.github.io/Top-Down-Extraction-Shooter/)** — no download, just click the link.
+
+## Running it yourself
 
 You don't need to install anything.
 
