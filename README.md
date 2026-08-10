@@ -25,8 +25,6 @@ python3 -m http.server 8000
 
 Then open `http://localhost:8000` in your browser.
 
-Check out [`GAME_PLAN.md`](GAME_PLAN.md) to see the full design: all the levels, enemies, weapons, and what's planned next.
-
 ## Controls
 
 | Action | Key |
