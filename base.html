@@ -124,6 +124,32 @@
             font-family: Arial, sans-serif;
         }
         #btnHighscores:hover { border-color: #00ff00; color: #00ff00; }
+
+        #btnHelp {
+            position: fixed;
+            bottom: 12px;
+            right: 12px;
+            background: rgba(10,10,20,0.9);
+            border: 1px solid #555;
+            color: #ccc;
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 201;
+            font-family: Arial, sans-serif;
+        }
+        #btnHelp:hover { border-color: #66ccff; color: #66ccff; }
+        #helpWindow p { margin: 6px 0; line-height: 1.4; }
+        #helpWindow h3 { margin-bottom: 8px; }
+        #btnCloseHelp {
+            background: rgba(20,20,30,0.9);
+            border: 1px solid #666;
+            color: #ddd;
+            padding: 5px 14px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        #btnCloseHelp:hover { border-color: #66ccff; color: #66ccff; }
     </style>
 </head>
 <body>
@@ -156,6 +182,20 @@
     </div>
     <button id="btnToggleInv">INVENTORY [I]</button>
     <button id="btnHighscores" onclick="window.location.href='highscores.html'">HIGHSCORES</button>
+    <button id="btnHelp">HOW TO PLAY [H]</button>
+
+    <!-- How To Play overlay -->
+    <div class="inv-window" id="helpWindow" style="left:50%; top:50%; transform:translate(-50%,-50%); width:420px; display:none;">
+        <h3>Welcome to the Burrow</h3>
+        <p>This is your home base between runs. Walk your mouse up to any of the
+        boxes on screen — weapons, skills, the shop — and press <b>E</b> to buy,
+        craft, or equip it.</p>
+        <p><b>Equipped Loadout</b> (bottom-left) shows what you're carrying right now.</p>
+        <p>Pick a level at <b>SELECT LEVEL</b>, then walk to the door at the bottom
+        and press <b>E</b> to start the run.</p>
+        <p style="color:#888;">Press H any time to see this again.</p>
+        <button id="btnCloseHelp" style="margin-top:6px;">Got it</button>
+    </div>
 
     <script>
         // Canvas setup
@@ -3528,10 +3568,62 @@
             runMoneyEarned = 0;
         }
 
+        // The base is wall-to-wall with station displays (weapons, skills, wardrobe...),
+        // so the dead-center spawn point used to land the player right on top of the
+        // passive skills grid, drawing the mouse half-hidden behind the skill cards.
+        // This finds a spot in the open gap between the weapon row and the skill grid
+        // that isn't sitting on top of any station or the bottom prompt bar.
+        function findClearBaseSpawn() {
+            const promptBar = {
+                x: baseConfig.x + baseConfig.width / 2 - 260,
+                y: baseConfig.y + baseConfig.height - 90,
+                width: 520,
+                height: 32
+            };
+            const allStations = [
+                ...weaponStations, ...upgradeStations, ...grenadeStations,
+                ...modStations, ...skillStations, ...wardrobeStations, ...levelStations,
+                promptBar
+            ];
+            const overlapsAStation = (x, y) => allStations.some(s =>
+                x < s.x + s.width && x + player.width > s.x &&
+                y < s.y + s.height && y + player.height > s.y
+            );
+
+            const startX = baseConfig.x + baseConfig.width / 2 - player.width / 2;
+            const weaponRowBottom = weaponStations.length
+                ? Math.max(...weaponStations.map(s => s.y + s.height))
+                : baseConfig.y + baseConfig.wallThickness;
+            const skillGridTop = skillStations.length
+                ? Math.min(...skillStations.map(s => s.y))
+                : baseConfig.y + baseConfig.height * 0.35;
+            const startY = (weaponRowBottom + skillGridTop) / 2 - player.height / 2;
+
+            if (!overlapsAStation(startX, startY)) {
+                return { x: startX, y: startY };
+            }
+
+            for (let ring = 20; ring <= baseConfig.height; ring += 20) {
+                for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 12) {
+                    const x = startX + Math.cos(angle) * ring;
+                    const y = startY + Math.sin(angle) * ring;
+                    const inBounds = x > baseConfig.x + baseConfig.wallThickness &&
+                        x + player.width < baseConfig.x + baseConfig.width - baseConfig.wallThickness &&
+                        y > baseConfig.y + baseConfig.wallThickness &&
+                        y + player.height < baseConfig.y + baseConfig.height - baseConfig.wallThickness;
+                    if (inBounds && !overlapsAStation(x, y)) {
+                        return { x, y };
+                    }
+                }
+            }
+            return { x: startX, y: startY }; // fall back to the door spot even if it overlaps
+        }
+
         function resetToBase() {
             resetRunState();
-            player.x = baseConfig.x + baseConfig.width / 2 - player.width / 2;
-            player.y = baseConfig.y + baseConfig.height / 2 - player.height / 2;
+            const spawn = findClearBaseSpawn();
+            player.x = spawn.x;
+            player.y = spawn.y;
             setBaseDoorOpen(false);
             deathTimer = 0;
             deathMoneyCount = 0;
@@ -3908,12 +4000,31 @@
         // Award materials from last run (if any kills param)
         awardRunMaterials();
 
+        // How To Play overlay — shown once automatically the first time someone
+        // reaches the base, and any time after that via the button or H key.
+        const helpWindow = document.getElementById('helpWindow');
+        const btnHelp = document.getElementById('btnHelp');
+        const btnCloseHelp = document.getElementById('btnCloseHelp');
+        function showHelp() { helpWindow.style.display = 'block'; }
+        function hideHelp() { helpWindow.style.display = 'none'; }
+        btnHelp.addEventListener('click', showHelp);
+        btnCloseHelp.addEventListener('click', hideHelp);
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'h') {
+                helpWindow.style.display === 'block' ? hideHelp() : showHelp();
+            }
+        }, true); // capture phase so it fires before the canvas keydown
+
         function enterBase() {
             loadTransientStateFromQuery();
             applySelectedWeapon(false);
             resetToBase();
             gameState = 'base';
             refreshEquipWindow();
+            if (!localStorage.getItem('mh_seenBaseTutorial')) {
+                localStorage.setItem('mh_seenBaseTutorial', '1');
+                showHelp();
+            }
         }
 
         // Draw hub screen
